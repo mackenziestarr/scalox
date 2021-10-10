@@ -1,0 +1,10 @@
+var x = 2;
+for (var y = 3; y <= 10; y = y + 1) {
+}
+if (true) {
+ 10
+} else {
+// comment #1
+// comment #2
+ 5
+}
