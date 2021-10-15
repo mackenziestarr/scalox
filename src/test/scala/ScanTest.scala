@@ -15,7 +15,7 @@ class ScanTest
   behavior of "ScanTest"
   it should "parse single tokens" in {
     scan("(){},.+-;*!!====<=<>=>/").value shouldBe Vector(
-      LeftParen(1), RightParen(1), LeftBracket(1), RightBracket(1),
+      LeftParenthesis(1), RightParenthesis(1), LeftBracket(1), RightBracket(1),
       Comma(1), Dot(1), Plus(1), Minus(1), Semicolon(1), Star(1),
       Bang(1), BangEqual(1), EqualEqual(1), Equal(1), LessThanEqual(1),
       LessThan(1), GreaterThanEqual(1), GreaterThan(1), Slash(1), EOF(1)

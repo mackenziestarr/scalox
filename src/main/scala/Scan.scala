@@ -14,21 +14,19 @@ private def scan(in: String, line: Int, errors: Vector[String], tokens: Vector[T
   else
     val (n, inc, errorOpt, tokenOpt) = token(in, line) match {
       case t : Token.String           => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(t))
-      case t : Token.Skip             => (t.lexeme.length, 0, None, None)
-      case t : Token.MultiLineComment => (t.lexeme.length, t.lexeme.count(_ == '\n'), None, None)
-      case t : Token.Newline          => (1, 1, None, None)
       case t : Token                  => (t.lexeme.length, 0, None, Some(t))
+      case Skip(length, newLines)     => (length, newLines, None, None)
       case ScanError(message, line, n) => (n, 0, Some(s"[line ${line}] Error: ${message}"), None)
     }
     scan(in.drop(n), line + inc, errors ++ errorOpt, tokens ++ tokenOpt)
 }
 
-private def token(in: String, line: Int): ScanError | Token = {
+private def token(in: String, line: Int): ScanError | Skip | Token = {
   import Token._
   val (head, tail) = (in.head, in.tail)
   head match
-    case '(' => LeftParen(line)
-    case ')' => RightParen(line)
+    case '(' => LeftParenthesis(line)
+    case ')' => RightParenthesis(line)
     case '{' => LeftBracket(line)
     case '}' => RightBracket(line)
     case ',' => Comma(line)
@@ -45,11 +43,11 @@ private def token(in: String, line: Int): ScanError | Token = {
     case '<' => if tail.headOption == Some('=') then LessThanEqual(line) else LessThan(line)
     case '>' => if tail.headOption == Some('=') then GreaterThanEqual(line) else GreaterThan(line)
     case '/' => tail.headOption match
-      case Some('/') => Skip(in.takeWhile(_ != '\n'), line)
+      case Some('/') => Skip(in.takeWhile(_ != '\n').length, 0)
       case Some('*') => parseMultiLine(in, line)
       case _ => Slash(line)
-    case x @ (' ' | '\r' | '\t') => Skip(x.toString, line)
-    case '\n' => Newline(line)
+    case ' ' | '\r' | '\t' => Skip(1, 0)
+    case '\n' => Skip(1, 1)
     case '"' => parseString(in, line)
     case x if isDigit(x) => parseNumber(in, line)
     case x if isAlpha(x) => parseIdentifier(in, line)
@@ -57,10 +55,10 @@ private def token(in: String, line: Int): ScanError | Token = {
 }
 
 // TODO(@mstarr) support nested multi-line comments
-private def parseMultiLine(in: String, line: Int): ScanError | Token =
+private def parseMultiLine(in: String, line: Int): ScanError | Skip | Token =
   val (str, rest) = in.drop(2).span(_ != '*')
   rest.tail.headOption match
-    case Some('/') => Token.MultiLineComment("/*" + str + "*/", line)
+    case Some('/') => Skip(str.length + 4, str.count(_ == '\n'))
     case _ => ScanError("Unterminated multi-line comment.", line, in.length)
 
 private def parseString(in: String, line: Int): ScanError | Token =
@@ -93,10 +91,17 @@ private def parseIdentifier(in: String, line: Int) = {
     }
   }
 
+/**
+ * used for consuming tokens not considered in parser
+ * e.g. newlines, whitespace, comments
+ * @param length to advance to next token
+ * @param newLines present in the consumed contents
+ */
+case class Skip(length: Int, newLines: Int)
 
 enum Token(val lexeme: String, val line: Int):
-  case LeftParen(l: Int) extends Token("(", l)
-  case RightParen(l: Int) extends Token(")", l)
+  case LeftParenthesis(l: Int) extends Token("(", l)
+  case RightParenthesis(l: Int) extends Token(")", l)
   case LeftBracket(l: Int) extends Token("{", l)
   case RightBracket(l: Int) extends Token("}", l)
   case Comma(l: Int) extends Token(",", l)
@@ -116,9 +121,6 @@ enum Token(val lexeme: String, val line: Int):
   case GreaterThan(l: Int) extends Token(">", l)
   case String(override val lexeme: Predef.String, value: Predef.String, l: Int) extends Token(lexeme, l)
   case Number(override val lexeme: Predef.String, value: Double, l: Int) extends Token(lexeme, l)
-  case Newline(l: Int) extends Token("\n", l) // not included in final token list
-  case MultiLineComment(override val lexeme: Predef.String, l: Int) extends Token(lexeme, l) // not included in final token list
-  case Skip(override val lexeme: Predef.String, l: Int) extends Token(lexeme, l) // not included in final token list
   case ReservedWord(override val lexeme: Predef.String, `type`: ReservedWords, l: Int) extends Token(lexeme, l)
   case Identifier(override val lexeme: Predef.String, l: Int) extends Token(lexeme, l)
   case EOF(l: Int) extends Token("EOF", l)
