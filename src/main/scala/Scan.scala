@@ -13,10 +13,11 @@ private def scan(in: String, line: Int, errors: Vector[String], tokens: Vector[T
   if in.isEmpty then Either.cond(errors.isEmpty, tokens :+ Token.EOF(line), errors)
   else
     val (n, inc, errorOpt, tokenOpt) = token(in, line) match {
-      case t : Token.String => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(t))
-      case t : Token.Skip   => (t.lexeme.length, 0, None, None)
-      case t: Token.Newline => (1, 1, None, None)
-      case t: Token         => (t.lexeme.length, 0, None, Some(t))
+      case t : Token.String           => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(t))
+      case t : Token.Skip             => (t.lexeme.length, 0, None, None)
+      case t : Token.MultiLineComment => (t.lexeme.length, t.lexeme.count(_ == '\n'), None, None)
+      case t : Token.Newline          => (1, 1, None, None)
+      case t : Token                  => (t.lexeme.length, 0, None, Some(t))
       case ScanError(message, line, n) => (n, 0, Some(s"[line ${line}] Error: ${message}"), None)
     }
     scan(in.drop(n), line + inc, errors ++ errorOpt, tokens ++ tokenOpt)
@@ -25,7 +26,7 @@ private def scan(in: String, line: Int, errors: Vector[String], tokens: Vector[T
 private def token(in: String, line: Int): ScanError | Token = {
   import Token._
   val (head, tail) = (in.head, in.tail)
-  head match {
+  head match
     case '(' => LeftParen(line)
     case ')' => RightParen(line)
     case '{' => LeftBracket(line)
@@ -43,15 +44,24 @@ private def token(in: String, line: Int): ScanError | Token = {
     case '=' => if tail.headOption == Some('=') then EqualEqual(line) else Equal(line)
     case '<' => if tail.headOption == Some('=') then LessThanEqual(line) else LessThan(line)
     case '>' => if tail.headOption == Some('=') then GreaterThanEqual(line) else GreaterThan(line)
-    case '/' => if tail.headOption == Some('/') then Skip(in.takeWhile(_ != '\n'), line) else Slash(line)
+    case '/' => tail.headOption match
+      case Some('/') => Skip(in.takeWhile(_ != '\n'), line)
+      case Some('*') => parseMultiLine(in, line)
+      case _ => Slash(line)
     case x @ (' ' | '\r' | '\t') => Skip(x.toString, line)
     case '\n' => Newline(line)
     case '"' => parseString(in, line)
     case x if isDigit(x) => parseNumber(in, line)
     case x if isAlpha(x) => parseIdentifier(in, line)
     case _ => ScanError(s"Unexpected character: '$head'", line, 1)
-  }
 }
+
+// TODO(@mstarr) support nested multi-line comments
+private def parseMultiLine(in: String, line: Int): ScanError | Token =
+  val (str, rest) = in.drop(2).span(_ != '*')
+  rest.tail.headOption match
+    case Some('/') => Token.MultiLineComment("/*" + str + "*/", line)
+    case _ => ScanError("Unterminated multi-line comment.", line, in.length)
 
 private def parseString(in: String, line: Int): ScanError | Token =
   val (str, rest) = in.tail.span(_ != '"')
@@ -107,6 +117,7 @@ enum Token(val lexeme: String, val line: Int):
   case String(override val lexeme: Predef.String, value: Predef.String, l: Int) extends Token(lexeme, l)
   case Number(override val lexeme: Predef.String, value: Double, l: Int) extends Token(lexeme, l)
   case Newline(l: Int) extends Token("\n", l) // not included in final token list
+  case MultiLineComment(override val lexeme: Predef.String, l: Int) extends Token(lexeme, l) // not included in final token list
   case Skip(override val lexeme: Predef.String, l: Int) extends Token(lexeme, l) // not included in final token list
   case ReservedWord(override val lexeme: Predef.String, `type`: ReservedWords, l: Int) extends Token(lexeme, l)
   case Identifier(override val lexeme: Predef.String, l: Int) extends Token(lexeme, l)
