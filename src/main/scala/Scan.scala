@@ -9,7 +9,7 @@ def scan(in: String): Either[Vector[String], Vector[Token]] =
   scan(in, 1, Vector.empty, Vector.empty)
 
 @tailrec
-private def scan(in: String, line: Int, errors: Vector[String], tokens: Vector[Token]): Either[Vector[String], Vector[Token]] = {
+private def scan(in: String, line: Int, errors: Vector[String], tokens: Vector[Token]): Either[Vector[String], Vector[Token]] =
   if in.isEmpty then Either.cond(errors.isEmpty, tokens :+ Token.EOF(line), errors)
   else
     val (n, inc, errorOpt, tokenOpt) = token(in, line) match {
@@ -19,9 +19,8 @@ private def scan(in: String, line: Int, errors: Vector[String], tokens: Vector[T
       case ScanError(message, line, n) => (n, 0, Some(s"[line ${line}] Error: ${message}"), None)
     }
     scan(in.drop(n), line + inc, errors ++ errorOpt, tokens ++ tokenOpt)
-}
 
-private def token(in: String, line: Int): ScanError | Skip | Token = {
+private def token(in: String, line: Int): ScanError | Skip | Token =
   import Token._
   val (head, tail) = (in.head, in.tail)
   head match
@@ -52,14 +51,23 @@ private def token(in: String, line: Int): ScanError | Skip | Token = {
     case x if isDigit(x) => parseNumber(in, line)
     case x if isAlpha(x) => parseIdentifier(in, line)
     case _ => ScanError(s"Unexpected character: '$head'", line, 1)
-}
 
-// TODO(@mstarr) support nested multi-line comments
-private def parseMultiLine(in: String, line: Int): ScanError | Skip | Token =
-  val (str, rest) = in.drop(2).span(_ != '*')
-  rest.tail.headOption match
-    case Some('/') => Skip(str.length + 4, str.count(_ == '\n'))
-    case _ => ScanError("Unterminated multi-line comment.", line, in.length)
+private def parseMultiLine(in: String, line: Int): io.lox.ScanError | io.lox.Skip =
+  parseMultiLine(in.drop(2), line, "/*", 1, false)
+
+@tailrec
+private def parseMultiLine(in: String, line: Int, drop: String, nestingLevel: Int, hadError: Boolean): io.lox.ScanError | io.lox.Skip =
+  if nestingLevel == 0 then
+    if hadError
+    then ScanError("Unterminated multi-line comment.", line, in.length + drop.length)
+    else Skip(drop.length, drop.count(_ == '\n'))
+  else
+    in.indexOf("/*") match
+      case -1 => in.indexOf("*/") match
+        case -1 => parseMultiLine(in, line, "", 0, true)
+        case i => parseMultiLine(in.drop(i + 2), line, drop + in.substring(0, i) + "*/", nestingLevel - 1, false)
+      case i => parseMultiLine(in.drop(i + 2), line, drop + in.substring(0, i) + "/*", nestingLevel + 1, false)
+
 
 private def parseString(in: String, line: Int): ScanError | Token =
   val (str, rest) = in.tail.span(_ != '"')
@@ -67,8 +75,11 @@ private def parseString(in: String, line: Int): ScanError | Token =
     Token.String(str, str, line)
   else ScanError("Unterminated string.", line, in.length)
 
-private def isDigit(c: Char): Boolean = c >= '0' && c <= '9'
-private def parseNumber(in: String, line: Int): ScanError | Token = {
+private def isDigit(c: Char): Boolean = ('0' to '9').containsTyped(c)
+private def isAlpha(c: Char): Boolean = ('a' to 'z').containsTyped(c) || ('A' to 'Z').containsTyped(c) || c == '_'
+private def isAlphaNumeric(c: Char): Boolean = isAlpha(c) || isDigit(c)
+
+private def parseNumber(in: String, line: Int): ScanError | Token =
   val (prefix, rest) = in.span(isDigit)
   val suffix: String = if rest.headOption == Some('.') then "." + rest.tail.takeWhile(isDigit) else ""
   val lexeme = prefix + suffix
@@ -76,20 +87,14 @@ private def parseNumber(in: String, line: Int): ScanError | Token = {
     ScanError(s"Invalid numeric syntax, found '${prefix}.' expected '${prefix}.0'", line, lexeme.length)
   else
     Token.Number(lexeme, lexeme.toDouble, line)
-}
 
-private def isAlpha(c: Char): Boolean =
-  ('a' to 'z').containsTyped(c) || ('A' to 'Z').containsTyped(c) || c == '_'
-private def isAlphaNumeric(c: Char): Boolean = isAlpha(c) || isDigit(c)
-
-private def parseIdentifier(in: String, line: Int) = {
+private def parseIdentifier(in: String, line: Int) =
   val word = in.takeWhile(isAlphaNumeric)
   Try(ReservedWords.valueOf(word))
     .toOption
     .fold(Token.Identifier(word, line)) {
       Token.ReservedWord(word, _, line)
     }
-  }
 
 /**
  * used for consuming tokens not considered in parser
@@ -97,7 +102,7 @@ private def parseIdentifier(in: String, line: Int) = {
  * @param length to advance to next token
  * @param newLines present in the consumed contents
  */
-case class Skip(length: Int, newLines: Int)
+private case class Skip(length: Int, newLines: Int)
 
 enum Token(val lexeme: String, val line: Int):
   case LeftParenthesis(l: Int) extends Token("(", l)

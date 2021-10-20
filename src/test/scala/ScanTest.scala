@@ -25,7 +25,8 @@ class ScanTest
     scan(" \t\r\n").value shouldBe Vector(EOF(2))
     scan("// some comment\n").value shouldBe Vector(EOF(2))
     scan("/* multi-line\n\n\ncomment*/").value shouldBe Vector(EOF(4))
-    // scan("/* multi-line /* nested */ comment */").value shouldBe Vector(EOF(1))
+    scan("/* multi-line /* nested \n\n */ comment */").value shouldBe Vector(EOF(3))
+    scan("/* multi-line /* nested */ unterminated comment").left.value shouldBe Vector("[line 1] Error: Unterminated multi-line comment.")
     scan("/* unterminated multi-line\ncomment").left.value shouldBe Vector("[line 1] Error: Unterminated multi-line comment.")
   }
   it should "parse Number" in {
