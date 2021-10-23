@@ -12,13 +12,6 @@ class ParseTest
   with Matchers:
 
   behavior of "Parser"
-  /*it should "parse simple" in {
-    val actual = for {
-      tokens <- scan("2 == 3")
-      parsed <- parse(tokens)
-    } yield parsed
-    actual.value shouldBe Binary(Literal(Token.Number("2", 2.0d, 1)), Token.EqualEqual(1), Literal(Token.Number("3", 3.0d, 1)))
-  }*/
   it should "parse multiple" in {
     val actual = for {
       tokens <- scan("1 == 2 == (3 == 4)")

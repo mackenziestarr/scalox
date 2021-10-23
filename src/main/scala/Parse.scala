@@ -23,10 +23,9 @@ enum Expression:
   case Grouping(expr: Expression)
   case Literal(token: Token.String | Token.Number | Token.ReservedWord)
 
-def parse(input: Seq[Token]): Either[String, Expression] = {
+def parse(input: Seq[Token]): Either[Vector[String], Expression] = {
   val (remaining, expr) = Productions.expression(input)
-  println(expr)
-  if remaining.tail.nonEmpty then Left(s"error: ${remaining.tail}") else Right(expr)
+  if remaining.tail.nonEmpty then Left(Vector(s"error: ${remaining.tail}")) else Right(expr)
 }
 
 private object Productions:
