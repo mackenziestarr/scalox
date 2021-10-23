@@ -3,6 +3,8 @@ import io.lox.ReservedWords.{`false`, `nil`, `true`}
 import io.lox.Token
 import io.lox.Token.{EqualEqual, Number}
 
+import scala.annotation.tailrec
+
 enum Expression:
   def show: String = this match {
     case Binary(left, operator, right) => s"(${operator.lexeme} ${left.show} ${right.show})"
@@ -23,45 +25,54 @@ enum Expression:
 
 def parse(input: Seq[Token]): Either[String, Expression] = {
   val (remaining, expr) = Productions.expression(input)
-  if remaining.tail.nonEmpty then Left("error") else Right(expr)
+  println(expr)
+  if remaining.tail.nonEmpty then Left(s"error: ${remaining.tail}") else Right(expr)
 }
-
-
-// 2 < 3 == 3 <= 4
 
 private object Productions:
   import io.lox.Expression.*
   import io.lox.Token.*
+  type Comparison = GreaterThan | GreaterThanEqual | LessThan | LessThanEqual
+  type Term = Minus | Plus
+  type Factor = Star | Slash
+  type Unary = Bang | Minus
+
+  inline def binaryMatch[A <: Token](next: Seq[Token] => (Seq[Token], Expression))(input: Seq[Token]) =
+    val (in, left) = next(input)
+    @tailrec
+    def loop(input: Seq[Token], expr: Expression): (Seq[Token], Expression) = {
+      input.head match
+        case t : A =>
+          val (i, right) = next(input.drop(1))
+          loop(i, Binary(expr, t, right))
+        case _ => (input, expr)
+    }
+    loop(in, left)
+
+
   def expression(input: Seq[Token]) = equality(input)
-  def equality(input: Seq[Token]): (Seq[Token], Expression) =
-    val (in, left) = comparison(input)
-    in.head match
-      case t : EqualEqual =>
-        val (i, right) = comparison(in.drop(1))
-        (i, Binary(left, t, right))
+  def equality(input: Seq[Token])   = binaryMatch[EqualEqual](comparison _)(input)
+  def comparison(input: Seq[Token]) = binaryMatch[Comparison](term _)(input)
+  def term(input: Seq[Token])       = binaryMatch[Term](factor _)(input)
+  def factor(input: Seq[Token])     = binaryMatch[Factor](unary _)(input)
+
+  def unary(input: Seq[Token]): (Seq[Token], Expression) =
+    input.head match
+      case t : Unary =>
+        val (in, right) = unary(input.drop(1))
+        (in, Unary(t, right))
+      case _ => primary(input)
+
+  def primary(input: Seq[Token]): (Seq[Token], Expression) =
+    val token = input.head match
+      case t : (Token.Number | Token.String) => Literal(t)
+      case t @ Token.ReservedWord(lexeme, `true`, _) => Literal(t)
+      case t @ Token.ReservedWord(lexeme, `false`, _) => Literal(t)
+      case t @ Token.ReservedWord(lexeme, `nil`, _) => Literal(t)
+      case t : LeftParenthesis =>
+        val (i, expr) = expression(input.drop(1))
+        i.head match
+          case t : RightParenthesis => Grouping(expr)
+          case _ => ??? // TODO(@mstarr) 'Expected ')' after expression'
       case _ => ???
-  def comparison(input: Seq[Token]): (Seq[Token], Expression) =
-    val (in, left) = term(input)
-    in.head match
-      case t : (GreaterThan | GreaterThanEqual | LessThan | LessThanEqual) =>
-        val (i, right) = term(in.drop(1))
-        (i, Binary(left, t, right))
-      case _ => (in, left)
-  def term(input: Seq[Token]): (Seq[Token], Expression) =
-    val (in, left) = factor(input)
-    in.head match
-      case t : (Minus | Plus) =>
-        val (i, right) = factor(in.drop(1))
-        (i, Binary(left, t, right))
-      case _ => (in, left)
-  def factor(input: Seq[Token]): (Seq[Token], Expression) =
-    val (in, left) = primary(input)
-    in.head match
-      case t : (Star | Slash) =>
-        val (i, right) = primary(in.drop(1))
-        (i, Binary(left, t, right))
-      case _ => (in, left)
-  def primary(in: Seq[Token]): (Seq[Token], Expression) =
-    in.head match
-      case t : Number => (in.drop(1), Literal(t))
-      case _ => ???
+    (input.drop(1), token)
