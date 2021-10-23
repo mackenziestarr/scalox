@@ -19,9 +19,9 @@ class ParseTest
     } yield parsed
     actual.value shouldBe Binary(Literal(Token.Number("2", 2.0d, 1)), Token.EqualEqual(1), Literal(Token.Number("3", 3.0d, 1)))
   }*/
-  it should "parse mutliple" in {
+  it should "parse multiple" in {
     val actual = for {
-      tokens <- scan("1 == 2 == 3")
+      tokens <- scan("1 == 2 == (3 == 4)")
       parsed <- parse(tokens)
     } yield parsed
     actual.value shouldBe
@@ -32,7 +32,11 @@ class ParseTest
           Literal(Number("2",2.0,1))
         ),
         EqualEqual(1),
-        Literal(Number("3",3.0,1)))
+        Grouping(
+          Binary(
+            Literal(Number("3",3.0,1)),
+            EqualEqual(1),
+            Literal(Number("4",4.0,1)))))
   }
   it should "parse complex" in {
     val actual = for {

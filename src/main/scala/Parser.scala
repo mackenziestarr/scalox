@@ -64,15 +64,14 @@ private object Productions:
       case _ => primary(input)
 
   def primary(input: Seq[Token]): (Seq[Token], Expression) =
-    val token = input.head match
-      case t : (Token.Number | Token.String) => Literal(t)
-      case t @ Token.ReservedWord(lexeme, `true`, _) => Literal(t)
-      case t @ Token.ReservedWord(lexeme, `false`, _) => Literal(t)
-      case t @ Token.ReservedWord(lexeme, `nil`, _) => Literal(t)
+    input.head match
+      case t : (Token.Number | Token.String) => (input.drop(1), Literal(t))
+      case t @ Token.ReservedWord(lexeme, `true`, _) => (input.drop(1), Literal(t))
+      case t @ Token.ReservedWord(lexeme, `false`, _) => (input.drop(1), Literal(t))
+      case t @ Token.ReservedWord(lexeme, `nil`, _) => (input.drop(1), Literal(t))
       case t : LeftParenthesis =>
         val (i, expr) = expression(input.drop(1))
         i.head match
-          case t : RightParenthesis => Grouping(expr)
+          case t : RightParenthesis => (i.drop(1), Grouping(expr))
           case _ => ??? // TODO(@mstarr) 'Expected ')' after expression'
       case _ => ???
-    (input.drop(1), token)
