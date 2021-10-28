@@ -6,21 +6,37 @@ import io.lox.Expression.*
 
 import scala.util.Try
 
-def eval(expr: Expression): Either[Vector[String], ExprValue] =
-  Try(_eval(expr)).fold({
-    e => Left(Vector(e.getMessage))
-  }, {
-    case (x : ExprValue) => Right(x)
-  })
+def eval(expr: Expression): Either[Vector[String], ExprResult] =
+  Try(Eval.eval(expr)).fold(e => Left(Vector(e.getMessage)), x => Right(ExprResult.from(x)))
 
-def _eval(expr: Expression): ExprValue = expr match
-  case Literal(value) => value
-  case Grouping(expr) => _eval(expr)
-  case Unary(op, right) =>
-    val e = _eval(right)
-    op match {
-      case op : Token.Minus => -e.asInstanceOf[Double]
-      case _ => ???
-    }
+private[this] object Eval:
+  def isTruthy(value: ExprValue): Boolean = value match
+    case _ : Null => false
+    case b : Boolean => b
+    case _ => true
+  def eval(expr: Expression): ExprValue = expr match
+    case Literal(value) => value
+    case Grouping(expr) => eval(expr)
+    case Unary(op, right) =>
+      val value = eval(right)
+      op match
+        case _: Token.Minus => -value.asInstanceOf[Double]
+        case _: Token.Bang => !isTruthy(value)
+        case _ => ???
+    case Binary(left, op, right) =>
+      (eval(left), eval(right)) match
+        case (left: Double, right: Double) => op match {
+          case _: Token.Minus => left - right
+          case _: Token.Slash => left / right
+          case _: Token.Star => left * right
+          case _: Token.Plus => left + right
+          case _ => ???
+        }
+        case (left: String, right: String) => op match {
+          case _: Token.Plus => left + right
+          case _ => ???
+        }
+        case _ => ???
+
 
 

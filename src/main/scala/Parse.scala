@@ -7,16 +7,28 @@ import scala.collection.immutable.Nil
 import scala.annotation.tailrec
 import scala.util.Try
 
-type ExprValue = String | Double | Boolean | Nil.type
+type ExprValue = String | Double | Boolean | Null
+
+// TODO maybe i went too hard here
+opaque type ExprResult = ExprValue
+object ExprResult:
+  def from(value: ExprValue): ExprResult = value
+  def show(value: ExprResult): String = value match
+    case _ : Null => "nil"
+    case d : Double =>
+      val s : String = d.toString
+      val (left, right) = s.span(_ != '.')
+      if right == ".0" then left else s
+    case _ => value.toString
+extension (e: ExprResult)
+  def show: String = ExprResult.show(e)
+
 enum Expression:
   def show: String = this match {
     case Binary(left, operator, right) => s"(${operator.lexeme} ${left.show} ${right.show})"
     case Unary(operator, right) => s"(${operator.lexeme} ${right.show})"
     case Grouping(expr) => s"(group ${expr.show})"
-    // TODO typeclass show for Literal to share with interpreter?
-    case Literal(value) => value match
-      case _ : Nil.type => "nil"
-      case _ => value.toString
+    case l: Literal[?] => ExprResult.from(l.value).show
   }
   case Binary(left: Expression, operator: Token, right: Expression)
   case Unary(operator: Token, right: Expression)
@@ -39,7 +51,6 @@ def parse(input: Seq[Token]): Either[Vector[String], Expression] =
       then Left(Vector(s"error: ${remaining.tail}"))
       else Right(expr)
   })
-
 
 private def isSyncToken(t: Token) = t match
   case _: Token.Semicolon => true
@@ -66,6 +77,7 @@ private object Productions:
     val (in, left) = next(input)
     @tailrec
     def loop(input: Seq[Token], expr: Expression): (Seq[Token], Expression) = {
+      // TODO unsafe
       input.head match
         case t : A =>
           val (i, right) = next(input.drop(1))
@@ -81,6 +93,7 @@ private object Productions:
   def factor(input: Seq[Token])     = binaryMatch[Factor](unary _)(input)
 
   def unary(input: Seq[Token]): (Seq[Token], Expression) =
+    // TODO unsafe
     input.head match
       case t : Unary =>
         val (in, right) = unary(input.drop(1))
@@ -88,12 +101,13 @@ private object Productions:
       case _ => primary(input)
 
   def primary(input: Seq[Token]): (Seq[Token], Expression) =
+    // TODO unsafe
     input.head match
       case t : Token.String => (input.drop(1), Literal(t.value))
       case t : Token.Number => (input.drop(1), Literal(t.value))
       case t @ ReservedWord(lexeme, `true`, _) => (input.drop(1), Literal(true))
       case t @ ReservedWord(lexeme, `false`, _) => (input.drop(1), Literal(false))
-      case t @ ReservedWord(lexeme, `nil`, _) => (input.drop(1), Literal(Nil))
+      case t @ ReservedWord(lexeme, `nil`, _) => (input.drop(1), Literal(null))
       case t : LeftParenthesis =>
         val (i, expr) = expression(input.drop(1))
         i.head match

@@ -54,7 +54,6 @@ private def token(in: String, line: Int): ScanError | Skip | Token =
 
 private def parseMultiLine(in: String, line: Int): io.lox.ScanError | io.lox.Skip =
   parseMultiLine(in.drop(2), line, "/*", 1, false)
-
 @tailrec
 private def parseMultiLine(in: String, line: Int, drop: String, nestingLevel: Int, hadError: Boolean): io.lox.ScanError | io.lox.Skip =
   if nestingLevel == 0 then
@@ -67,7 +66,6 @@ private def parseMultiLine(in: String, line: Int, drop: String, nestingLevel: In
         case -1 => parseMultiLine(in, line, "", 0, true)
         case i => parseMultiLine(in.drop(i + 2), line, drop + in.substring(0, i) + "*/", nestingLevel - 1, false)
       case i => parseMultiLine(in.drop(i + 2), line, drop + in.substring(0, i) + "/*", nestingLevel + 1, false)
-
 
 private def parseString(in: String, line: Int): ScanError | Token =
   val (str, rest) = in.tail.span(_ != '"')
