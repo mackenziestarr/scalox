@@ -1,5 +1,5 @@
 import scala.io.{Source, StdIn}
-import io.lox.{Expression, parse, scan}
+import io.lox.{Expression, parse, scan, eval}
 
 @main def lox(args: String*): Unit = args match
     case Nil => runPrompt
@@ -17,18 +17,19 @@ def runPrompt: Unit =
     while (true) {
         print("> ")
         val line = StdIn.readLine
-        println(line)
         if (line == null) {
             println("bye.")
             return ()
         }
         val res = run(line)
+        res match
+            case Left(err) => println(s"error: ${err.mkString}")
+            case Right(res) => println(res)
     }
 
-def run(in: String): Either[Vector[String], Expression] =
-    val parsed = for
-        tokens <- scan(in)
-        parsed <- parse(tokens)
-    yield parsed
-    println(parsed)
-    parsed
+def run(in: String): Either[Vector[String], Any] =
+    for
+    tokens <- scan(in)
+    parsed <- parse(tokens)
+    result <- eval(parsed)
+    yield result
