@@ -20,16 +20,23 @@ class ParseTest
     actual.value shouldBe
       Binary(
         Binary(
-          Literal(Number("1",1.0,1)),
+          Literal(1.0d),
           EqualEqual(1),
-          Literal(Number("2",2.0,1))
+          Literal(2.0d)
         ),
         EqualEqual(1),
         Grouping(
           Binary(
-            Literal(Number("3",3.0,1)),
+            Literal(3.0d),
             EqualEqual(1),
-            Literal(Number("4",4.0,1)))))
+            Literal(4.0d))))
+  }
+  it should "error on invalid start of expression" in {
+    val actual = for {
+      tokens <- scan("<= 1")
+      parsed <- parse(tokens)
+    } yield parsed
+    actual.left.value shouldBe Vector("[line 1] Error at '<=': Expected expression")
   }
   it should "parse complex" in {
     val actual = for {
@@ -43,26 +50,26 @@ class ParseTest
             Binary(
               Unary(
                 Minus(1),
-                Literal(Token.Number("1", 1.0d, 1))
+                Literal(1.0d)
               ),
-              Token.Star(1),
-              Literal(Token.Number("2", 2.0d, 1)),
+              Star(1),
+              Literal(2.0d),
             ),
-            Token.Plus(1),
-            Literal(Token.Number("3", 3.0d, 1))
+            Plus(1),
+            Literal(3.0d)
           ),
-          Token.LessThan(1),
-          Literal(Token.Number("4", 4.0d, 1))
+          LessThan(1),
+          Literal(4.0d)
         ),
-        Token.EqualEqual(1),
+        EqualEqual(1),
         Binary(
-          Literal(Token.Number("5", 5.0d, 1)),
-          Token.LessThanEqual(1),
+          Literal(5.0d),
+          LessThanEqual(1),
           Binary(
-            Literal(Token.Number("6", 6.0d, 1)),
-            Token.Minus(1),
+            Literal(6.0d),
+            Minus(1),
             Binary(
-              Literal(Token.Number("7", 7.0d, 1)),
-              Token.Slash(1),
-              Literal(Token.Number("8", 8.0d, 1))))))
+              Literal(7.0d),
+              Slash(1),
+              Literal(8.0d)))))
   }

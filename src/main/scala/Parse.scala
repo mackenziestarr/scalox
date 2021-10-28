@@ -1,32 +1,58 @@
 package io.lox
-import io.lox.ReservedWords.{`false`, `nil`, `true`}
+import io.lox.ReservedWords.*
 import io.lox.Token
-import io.lox.Token.{EqualEqual, Number}
+import io.lox.Token.{EqualEqual, Number, ReservedWord}
+import scala.collection.immutable.Nil
 
 import scala.annotation.tailrec
+import scala.util.Try
 
+type ExprValue = String | Double | Boolean | Nil.type
 enum Expression:
   def show: String = this match {
     case Binary(left, operator, right) => s"(${operator.lexeme} ${left.show} ${right.show})"
     case Unary(operator, right) => s"(${operator.lexeme} ${right.show})"
     case Grouping(expr) => s"(group ${expr.show})"
-    case Literal(token) => token match
-      case s: Token.String => s.value
-      case n: Token.Number => n.value.toString
-      case Token.ReservedWord(lexeme, `true`, _) => lexeme
-      case Token.ReservedWord(lexeme, `false`, _) => lexeme
-      case Token.ReservedWord(lexeme, `nil`, _) => lexeme
-      case _ => ""
+    // TODO typeclass show for Literal to share with interpreter?
+    case Literal(value) => value match
+      case _ : Nil.type => "nil"
+      case _ => value.toString
   }
   case Binary(left: Expression, operator: Token, right: Expression)
   case Unary(operator: Token, right: Expression)
   case Grouping(expr: Expression)
-  case Literal(token: Token.String | Token.Number | Token.ReservedWord)
+  case Literal[T <: ExprValue ](value: T)
 
-def parse(input: Seq[Token]): Either[Vector[String], Expression] = {
-  val (remaining, expr) = Productions.expression(input)
-  if remaining.tail.nonEmpty then Left(Vector(s"error: ${remaining.tail}")) else Right(expr)
+case class ParseError(message: String, token: Token) extends Throwable {
+  override def getMessage = token match {
+    case _ : Token.EOF => s"[line ${token.line}] Error at end of file: ${message}"
+    case _ => s"[line ${token.line}] Error at '${token.lexeme}': ${message}"
+  }
 }
+
+def parse(input: Seq[Token]): Either[Vector[String], Expression] =
+  Try(Productions.expression(input)).fold({
+    (e: Throwable) => Left(Vector(e.getMessage))
+  }, {
+    (remaining, expr) =>
+      if remaining.tail.nonEmpty
+      then Left(Vector(s"error: ${remaining.tail}"))
+      else Right(expr)
+  })
+
+
+private def isSyncToken(t: Token) = t match
+  case _: Token.Semicolon => true
+  case ReservedWord(_, `class`, _) => true
+  case ReservedWord(_, `fun`, _) => true
+  case ReservedWord(_, `var`, _) => true
+  case ReservedWord(_, `for`, _) => true
+  case ReservedWord(_, `if`, _) => true
+  case ReservedWord(_, `while`, _) => true
+  case ReservedWord(_, `print`, _) => true
+  case ReservedWord(_, `return`, _) => true
+  case _ => false
+private def synchronize(input: Seq[Token]) = input.dropWhile(!isSyncToken(_))
 
 private object Productions:
   import io.lox.Expression.*
@@ -48,7 +74,6 @@ private object Productions:
     }
     loop(in, left)
 
-
   def expression(input: Seq[Token]) = equality(input)
   def equality(input: Seq[Token])   = binaryMatch[EqualEqual](comparison _)(input)
   def comparison(input: Seq[Token]) = binaryMatch[Comparison](term _)(input)
@@ -64,13 +89,14 @@ private object Productions:
 
   def primary(input: Seq[Token]): (Seq[Token], Expression) =
     input.head match
-      case t : (Token.Number | Token.String) => (input.drop(1), Literal(t))
-      case t @ Token.ReservedWord(lexeme, `true`, _) => (input.drop(1), Literal(t))
-      case t @ Token.ReservedWord(lexeme, `false`, _) => (input.drop(1), Literal(t))
-      case t @ Token.ReservedWord(lexeme, `nil`, _) => (input.drop(1), Literal(t))
+      case t : Token.String => (input.drop(1), Literal(t.value))
+      case t : Token.Number => (input.drop(1), Literal(t.value))
+      case t @ ReservedWord(lexeme, `true`, _) => (input.drop(1), Literal(true))
+      case t @ ReservedWord(lexeme, `false`, _) => (input.drop(1), Literal(false))
+      case t @ ReservedWord(lexeme, `nil`, _) => (input.drop(1), Literal(Nil))
       case t : LeftParenthesis =>
         val (i, expr) = expression(input.drop(1))
         i.head match
           case t : RightParenthesis => (i.drop(1), Grouping(expr))
-          case _ => ??? // TODO(@mstarr) 'Expected ')' after expression'
-      case _ => ???
+          case t => throw ParseError("Expected ')' after expression", t)
+      case t => throw ParseError("Expected expression", t)
