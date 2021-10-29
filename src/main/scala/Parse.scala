@@ -3,25 +3,14 @@ import io.lox.ReservedWords.*
 import io.lox.Token
 import io.lox.Token.{EqualEqual, Number, ReservedWord}
 import scala.collection.immutable.Nil
+import io.lox.ExprValue
 
 import scala.annotation.tailrec
 import scala.util.Try
 
-type ExprValue = String | Double | Boolean | Null
-
-// TODO maybe i went too hard here
-opaque type ExprResult = ExprValue
-object ExprResult:
-  def from(value: ExprValue): ExprResult = value
-  def show(value: ExprResult): String = value match
-    case _ : Null => "nil"
-    case d : Double =>
-      val s : String = d.toString
-      val (left, right) = s.span(_ != '.')
-      if right == ".0" then left else s
-    case _ => value.toString
-extension (e: ExprResult)
-  def show: String = ExprResult.show(e)
+enum Statement(val expression: Expression):
+  case Expression(override val expression: io.lox.Expression) extends Statement(expression)
+  case Print(override val expression: io.lox.Expression) extends Statement(expression)
 
 enum Expression:
   def show: String = this match {
@@ -42,15 +31,19 @@ case class ParseError(message: String, token: Token) extends Throwable {
   }
 }
 
-def parse(input: Seq[Token]): Either[Vector[String], Expression] =
-  Try(Productions.expression(input)).fold({
-    (e: Throwable) => Left(Vector(e.getMessage))
-  }, {
-    (remaining, expr) =>
-      if remaining.tail.nonEmpty
-      then Left(Vector(s"error: ${remaining.tail}"))
-      else Right(expr)
-  })
+def parse(input: Seq[Token]): Either[ParseError, Vector[Statement]] =
+  // TODO has to be some stdlib function for this
+  @tailrec
+  def loop(input: Seq[Token], out: Vector[Statement]): Vector[Statement] = {
+    input.headOption match
+      case Some(Token.EOF(_)) => out
+      case _ =>
+        val (remaining, statement) = Productions.statement(input)
+        loop(remaining, out :+ statement)
+  }
+  Try(loop(input, Vector.empty)).toEither.left.map {
+    case e: ParseError => e
+  }
 
 private def isSyncToken(t: Token) = t match
   case _: Token.Semicolon => true
@@ -86,6 +79,26 @@ private object Productions:
     }
     loop(in, left)
 
+  def statement(input: Seq[Token]) =
+    // TODO unsafe
+    input.head match
+      case ReservedWord(_, `print`, _) => printStatement(input.drop(1))
+      case _ => expressionStatement(input)
+
+  def printStatement(input: Seq[Token]) =
+    val (remaining, expr) = expression(input)
+    // TODO unsafe
+    remaining.head match
+      case _: Semicolon => (remaining.drop(1), Statement.Print(expr))
+      case t => throw ParseError("Expect ';' after value.", t)
+
+  def expressionStatement(input: Seq[Token]) =
+    val (remaining, expr) = expression(input)
+    // TODO unsafe
+    remaining.head match
+      case _: Semicolon => (remaining.drop(1), Statement.Expression(expr))
+      case t => throw ParseError("Expect ';' after value.", t)
+
   def expression(input: Seq[Token]) = equality(input)
   def equality(input: Seq[Token])   = binaryMatch[EqualEqual](comparison _)(input)
   def comparison(input: Seq[Token]) = binaryMatch[Comparison](term _)(input)
@@ -105,9 +118,9 @@ private object Productions:
     input.head match
       case t : Token.String => (input.drop(1), Literal(t.value))
       case t : Token.Number => (input.drop(1), Literal(t.value))
-      case t @ ReservedWord(lexeme, `true`, _) => (input.drop(1), Literal(true))
-      case t @ ReservedWord(lexeme, `false`, _) => (input.drop(1), Literal(false))
-      case t @ ReservedWord(lexeme, `nil`, _) => (input.drop(1), Literal(null))
+      case ReservedWord(lexeme, `true`, _) => (input.drop(1), Literal(true))
+      case ReservedWord(lexeme, `false`, _) => (input.drop(1), Literal(false))
+      case ReservedWord(lexeme, `nil`, _) => (input.drop(1), Literal(null))
       case t : LeftParenthesis =>
         val (i, expr) = expression(input.drop(1))
         i.head match

@@ -3,20 +3,21 @@ import scala.annotation.tailrec
 import scala.collection.StringView
 import scala.util.Try
 
-case class ScanError(message: String, line: Int, drop: Int)
+case class ScanError(message: String, line: Int, drop: Int):
+  def show: String = s"[line ${line}] Error: ${message}"
 
-def scan(in: String): Either[Vector[String], Vector[Token]] =
+def scan(in: String): Either[Vector[ScanError], Vector[Token]] =
   scan(in, 1, Vector.empty, Vector.empty)
 
 @tailrec
-private def scan(in: String, line: Int, errors: Vector[String], tokens: Vector[Token]): Either[Vector[String], Vector[Token]] =
+private def scan(in: String, line: Int, errors: Vector[ScanError], tokens: Vector[Token]): Either[Vector[ScanError], Vector[Token]] =
   if in.isEmpty then Either.cond(errors.isEmpty, tokens :+ Token.EOF(line), errors)
   else
     val (n, inc, errorOpt, tokenOpt) = token(in, line) match {
       case t : Token.String           => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(t))
       case t : Token                  => (t.lexeme.length, 0, None, Some(t))
       case Skip(length, newLines)     => (length, newLines, None, None)
-      case ScanError(message, line, n) => (n, 0, Some(s"[line ${line}] Error: ${message}"), None)
+      case s : ScanError => (s.drop, 0, Some(s), None)
     }
     scan(in.drop(n), line + inc, errors ++ errorOpt, tokens ++ tokenOpt)
 
