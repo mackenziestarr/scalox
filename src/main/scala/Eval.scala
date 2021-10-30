@@ -6,7 +6,18 @@ import io.lox.Token
 import io.lox.Expression.*
 import io.lox.Statement
 
+import scala.collection.mutable
 import scala.util.Try
+
+class RuntimeError(val token: Token, message: String) extends RuntimeException(message):
+  def show = s"${message}\n[line ${token.line}]"
+
+object Environment:
+  private val values = mutable.Map.empty[String, ExprValue]
+  def define(name: String, value: Option[ExprValue]) = values.update(name, value.getOrElse(null))
+  def get(name: Token.Identifier) = values.getOrElse(name.lexeme,
+    throw new RuntimeError(name, s"Undefined variable `${name.lexeme}`.")
+  )
 
 type ExprValue = String | Double | Boolean | Null
 
@@ -25,16 +36,27 @@ object ExprResult:
 extension (e: ExprResult)
   def show: String = ExprResult.show(e)
 
-def eval(statements: Seq[Statement]): Either[RuntimeError, Unit] =
+sealed trait Printer:
+  def show(e: ExprValue): Unit
+
+object ConsolePrinter extends Printer:
+  override def show(e: ExprValue): Unit =
+    println(ExprResult.from(e).show)
+
+class InMemoryPrinter extends Printer:
+  private var list = List.empty[String]
+  def get = list.reverse
+  override def show(e: ExprValue): Unit =
+    list = ExprResult.from(e).show :: list
+
+// TODO typeclass pattern with printers
+def eval(statements: Seq[Statement], p: Printer): Either[RuntimeError, Unit] =
   Try {
     for (statement <- statements)
-      do Eval.eval(statement)
+      do Eval.eval(statement, p)
   }.toEither.left.map {
     case e: RuntimeError => e
   }
-
-class RuntimeError(val token: Token, message: String) extends RuntimeException(message):
-  def show = s"${message}\n[line ${token.line}]"
 
 private[this] object Eval:
   import io.lox.Token.{String as _, *}
@@ -43,13 +65,16 @@ private[this] object Eval:
     case b: Boolean => b
     case _ => true
 
-  def eval(statement: Statement): Unit = statement match {
-    case Statement.Print(expr) => println(ExprResult.from(eval(expr)).show)
+  def eval[A](statement: Statement, p: Printer): Unit = statement match {
+    case Statement.Print(expr) => p.show(eval(expr))
     case Statement.Expression(expr) => eval(expr)
+    case Statement.Var(name, initializer) =>
+      Environment.define(name.lexeme, initializer.map(eval(_)))
   }
   def eval(expr: Expression): ExprValue = expr match
     case Literal(value) => value
     case Grouping(expr) => eval(expr)
+    case Var(identifier) => Environment.get(identifier)
     case Unary(op, right) =>
       val value = eval(right)
       op match
