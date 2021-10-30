@@ -15,7 +15,7 @@ def runFile(fileName: String): Unit =
     // TODO add better error handling
     case e: RuntimeError => sys.exit(70)
     case e: ParseError => sys.exit(64)
-    case e: Vector[ScanError] => sys.exit(64)
+    case e: List[ScanError] => sys.exit(64)
   }
 
 def runPrompt: Unit = loop {
@@ -35,11 +35,13 @@ inline def loop(body: => Unit) = while (true) {
   body
 }
 
-type Errors = Vector[ScanError] | ParseError | RuntimeError
+type Errors = List[ScanError] | ParseError | RuntimeError
 
 def run(in: String): Either[Errors, Unit] =
   for
     tokens <- scan(in)
+    _ = println(tokens)
     parsed <- parse(tokens)
+    _ = println(parsed)
     result <- eval(parsed)
   yield result

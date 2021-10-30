@@ -6,12 +6,13 @@ import scala.util.Try
 case class ScanError(message: String, line: Int, drop: Int):
   def show: String = s"[line ${line}] Error: ${message}"
 
-def scan(in: String): Either[Vector[ScanError], Vector[Token]] =
+// TODO: List or Vector pick one!
+def scan(in: String): Either[List[ScanError], List[Token]] =
   scan(in, 1, Vector.empty, Vector.empty)
 
 @tailrec
-private def scan(in: String, line: Int, errors: Vector[ScanError], tokens: Vector[Token]): Either[Vector[ScanError], Vector[Token]] =
-  if in.isEmpty then Either.cond(errors.isEmpty, tokens :+ Token.EOF(line), errors)
+private def scan(in: String, line: Int, errors: Vector[ScanError], tokens: Vector[Token]): Either[List[ScanError], List[Token]] =
+  if in.isEmpty then Either.cond(errors.isEmpty, tokens.appended(Token.EOF(line)).toList, errors.toList)
   else
     val (n, inc, errorOpt, tokenOpt) = token(in, line) match {
       case t : Token.String           => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(t))
