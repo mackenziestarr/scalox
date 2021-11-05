@@ -15,12 +15,14 @@ enum Statement:
 
 enum Expression:
   def show: String = this match {
+    case Assign(name, expr) => s"(${name.lexeme} = ${expr.show})"
     case Binary(left, operator, right) => s"(${operator.lexeme} ${left.show} ${right.show})"
     case Unary(operator, right) => s"(${operator.lexeme} ${right.show})"
     case Grouping(expr) => s"(group ${expr.show})"
     case l: Literal[?] => ExprResult.from(l.value).show
     case Var(name) => s"`${name.lexeme}`"
   }
+  case Assign(name: Token.Identifier, expr: Expression)
   case Binary(left: Expression, operator: Token, right: Expression)
   case Unary(operator: Token, right: Expression)
   case Grouping(expr: Expression)
@@ -134,7 +136,22 @@ private object Productions:
       case _: Semicolon => (remaining.drop(1), Statement.Expression(expr))
       case t => throw ParseError("Expect ';' after expression.", t)
 
-  def expression(input: List[Token]) = equality(input)
+  def expression(input: List[Token]) = assignment(input)
+
+  def assignment(input: List[Token]): (List[Token], Expression) =
+    val (out, expr) = equality(input)
+    out.head match
+      case t: Equal =>
+        expr match
+          case Var(name) =>
+            val (tail, value) = assignment(out.tail)
+            (tail, Assign(name, value))
+          case _ =>
+            // TODO not supposed to throw here, just report
+            // https://github.com/munificent/craftinginterpreters/blob/master/java/com/craftinginterpreters/lox/Lox.java#L109-L117
+            throw new ParseError("Invalid assignment target.", t)
+      case _ => (out, expr)
+
   def equality(input: List[Token])   = binaryMatch[EqualEqual](comparison _)(input)
   def comparison(input: List[Token]) = binaryMatch[Comparison](term _)(input)
   def term(input: List[Token])       = binaryMatch[Term](factor _)(input)

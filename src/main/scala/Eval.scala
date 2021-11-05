@@ -14,6 +14,10 @@ class RuntimeError(val token: Token, message: String) extends RuntimeException(m
 
 object Environment:
   private val values = mutable.Map.empty[String, ExprValue]
+  def assign(name: Token.Identifier, value: ExprValue) = {
+    get(name)
+    define(name.lexeme, Some(value))
+  }
   def define(name: String, value: Option[ExprValue]) = values.update(name, value.getOrElse(null))
   def get(name: Token.Identifier) = values.getOrElse(name.lexeme,
     throw new RuntimeError(name, s"Undefined variable `${name.lexeme}`.")
@@ -38,7 +42,7 @@ extension (e: ExprResult)
 
 trait Console:
   def println(s: String): Unit
-  
+
 def eval(statements: Seq[Statement])(using Console): Either[RuntimeError, Unit] =
   Try {
     for (statement <- statements)
@@ -61,6 +65,10 @@ private[this] object Eval:
       Environment.define(name.lexeme, initializer.map(eval(_)))
   }
   def eval(expr: Expression): ExprValue = expr match
+    case Assign(name, expr) =>
+      val value = eval(expr)
+      Environment.assign(name, value)
+      value
     case Literal(value) => value
     case Grouping(expr) => eval(expr)
     case Var(identifier) => Environment.get(identifier)

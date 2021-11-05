@@ -26,10 +26,11 @@ class EvalTest
       """
         | var a = 414;
         | var b = 141;
+        | b = 142;
         | print a + b;
         | print a - b;
         |""".stripMargin
     val actual: Either[Errors, Unit] = runLox(program)
     actual.isRight shouldBe true
-    console.get shouldBe List("555", "273")
+    console.get shouldBe List("556", "272")
   }
