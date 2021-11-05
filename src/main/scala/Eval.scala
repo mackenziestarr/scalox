@@ -36,24 +36,13 @@ object ExprResult:
 extension (e: ExprResult)
   def show: String = ExprResult.show(e)
 
-sealed trait Printer:
-  def show(e: ExprValue): Unit
-
-object ConsolePrinter extends Printer:
-  override def show(e: ExprValue): Unit =
-    println(ExprResult.from(e).show)
-
-class InMemoryPrinter extends Printer:
-  private var list = List.empty[String]
-  def get = list.reverse
-  override def show(e: ExprValue): Unit =
-    list = ExprResult.from(e).show :: list
-
-// TODO typeclass pattern with printers
-def eval(statements: Seq[Statement], p: Printer): Either[RuntimeError, Unit] =
+trait Console:
+  def println(s: String): Unit
+  
+def eval(statements: Seq[Statement])(using Console): Either[RuntimeError, Unit] =
   Try {
     for (statement <- statements)
-      do Eval.eval(statement, p)
+      do Eval.eval(statement)
   }.toEither.left.map {
     case e: RuntimeError => e
   }
@@ -65,8 +54,8 @@ private[this] object Eval:
     case b: Boolean => b
     case _ => true
 
-  def eval[A](statement: Statement, p: Printer): Unit = statement match {
-    case Statement.Print(expr) => p.show(eval(expr))
+  def eval[A](statement: Statement)(using Console): Unit = statement match {
+    case Statement.Print(expr) => summon[Console].println(ExprResult.from(eval(expr)).show)
     case Statement.Expression(expr) => eval(expr)
     case Statement.Var(name, initializer) =>
       Environment.define(name.lexeme, initializer.map(eval(_)))

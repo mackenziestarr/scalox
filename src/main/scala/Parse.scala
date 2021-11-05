@@ -34,7 +34,6 @@ case class ParseError(message: String, token: Token) extends Throwable {
   }
 }
 
-
 def parse(input: List[Token]): Either[ParseError, List[Statement]] =
   // TODO has to be some stdlib function for this
   @tailrec

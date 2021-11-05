@@ -1,16 +1,27 @@
-import io.lox.InMemoryPrinter
 import run as runLox
+import io.lox.ExprResult
 import org.scalatest.EitherValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.*
+import io.lox.Console
 
 class EvalTest
   extends AnyFlatSpec
     with EitherValues
     with Matchers:
 
+  trait Gettable:
+    def get: List[String]
+
   it should "store and evaluate variables" in {
-    val printer = new InMemoryPrinter
+
+    val console = new Console with Gettable:
+      private var list = List.empty[String]
+      def get = list.reverse
+      def println(s: String) = list = s :: list
+
+    given Console = console
+
     val program =
       """
         | var a = 414;
@@ -18,7 +29,7 @@ class EvalTest
         | print a + b;
         | print a - b;
         |""".stripMargin
-    val actual: Either[Errors, Unit] = runLox(printer, program)
+    val actual: Either[Errors, Unit] = runLox(program)
     actual.isRight shouldBe true
-    printer.get shouldBe List("555", "273")
+    console.get shouldBe List("555", "273")
   }
