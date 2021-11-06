@@ -36,21 +36,22 @@ case class ParseError(message: String, token: Token, tail: List[Token]) extends 
   }
 }
 
-def parse(input: List[Token]): Either[ParseError, List[Statement]] =
-  // TODO has to be some stdlib function for this
+// TODO only added to overcome type erasure
+final case class ParseErrors(u: List[ParseError])
+
+def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
   @tailrec
-  def loop(input: List[Token], out: List[Option[Statement]]): List[Option[Statement]] = {
+  def loop(input: List[Token], errors: List[ParseError], statements: List[Statement]): (List[ParseError], List[Statement]) = {
     input.headOption match
-      case Some(Token.EOF(_)) => out.reverse
+      case Some(Token.EOF(_)) => (errors.reverse, statements.reverse)
       case _ =>
-        val (remaining, statement) = Productions.declaration(input)
-        loop(remaining, statement :: out)
+        val (remaining, result) = Productions.declaration(input)
+        result match
+          case statement: Statement => loop(remaining, errors, statement :: statements)
+          case error: ParseError => loop(remaining, error :: errors, statements)
   }
-  Try(loop(input, List.empty)).toEither
-    .map(_.flatten)
-    .left.map {
-      case e: ParseError => e
-    }
+  val (errors, statements) = loop(input, List.empty, List.empty)
+  Either.cond(errors.isEmpty, statements, ParseErrors(errors))
 
 /**
  * TODO docblock
@@ -70,8 +71,6 @@ private def isSyncToken(t: Token) = t match
   case _ => false
 
 private def synchronize(input: List[Token]) = input.dropWhile(!isSyncToken(_))
-
-final case class NonEmptyList[+A](head: A, tail: List[A])
 
 private object Productions:
   import io.lox.Expression.*
@@ -94,19 +93,17 @@ private object Productions:
     }
     loop(in, left)
 
-  def declaration(input: List[Token]): (List[Token], Option[Statement]) =
+  def declaration(input: List[Token]): (List[Token], Statement | ParseError) =
     try {
-      val (out, stmt) = input.head match {
-        case ReservedWord(_, `var`, _) => varDeclaration(input.drop(1))
+      input.head match {
+        case ReservedWord(_, `var`, _) => varDeclaration(input.tail)
         case _ => statement(input)
       }
-      (out, Some(stmt))
     } catch {
       case (e: ParseError) =>
-        println(e.getMessage)
         // TODO do better than stuffing this into `e`
         val remaining = synchronize(e.tail)
-        (remaining, None)
+        (remaining, e)
     }
 
   def varDeclaration(input: List[Token]) =

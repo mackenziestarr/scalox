@@ -3,16 +3,19 @@ import scala.annotation.tailrec
 import scala.collection.StringView
 import scala.util.Try
 
+// TODO only added these shell types to overcome type erasure
+final case class ScanErrors(u: List[ScanError])
+
 case class ScanError(message: String, line: Int, drop: Int):
   def show: String = s"[line ${line}] Error: ${message}"
 
 // TODO: List or Vector pick one!
-def scan(in: String): Either[List[ScanError], List[Token]] =
+def scan(in: String): Either[ScanErrors, List[Token]] =
   scan(in, 1, Vector.empty, Vector.empty)
 
 @tailrec
-private def scan(in: String, line: Int, errors: Vector[ScanError], tokens: Vector[Token]): Either[List[ScanError], List[Token]] =
-  if in.isEmpty then Either.cond(errors.isEmpty, tokens.appended(Token.EOF(line)).toList, errors.toList)
+private def scan(in: String, line: Int, errors: Vector[ScanError], tokens: Vector[Token]): Either[ScanErrors, List[Token]] =
+  if in.isEmpty then Either.cond(errors.isEmpty, tokens.appended(Token.EOF(line)).toList, ScanErrors(errors.toList))
   else
     val (n, inc, errorOpt, tokenOpt) = token(in, line) match {
       case t : Token.String           => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(t))

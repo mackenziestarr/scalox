@@ -22,8 +22,8 @@ def runFile(fileName: String)(using Console): Unit =
   res.left.foreach {
     // TODO add better error handling
     case e: RuntimeError => sys.exit(70)
-    case e: ParseError => sys.exit(64)
-    case e: List[ScanError] => sys.exit(64)
+    case ScanErrors(errors) => sys.exit(64)
+    case ParseErrors(errors) => sys.exit(64)
   }
 
 @tailrec
@@ -35,12 +35,17 @@ def runPrompt(using Console): Unit = {
   }
   val res = run(line)
   res.left.foreach {
-    e => println(e)
+    // TODO add better error handling
+    case e: RuntimeError => println(e)
+    case ScanErrors(errors) => errors.map(_.show).foreach(println)
+    case ParseErrors(errors) => errors.map(_.getMessage).foreach(println)
   }
   runPrompt
 }
 
-type Errors = List[ScanError] | ParseError | RuntimeError
+
+
+type Errors = ParseErrors | ScanErrors | RuntimeError
 
 def run(in: String)(using Console): Either[Errors, Unit] =
   for
