@@ -29,7 +29,7 @@ enum Expression:
   case Literal[T <: ExprValue ](value: T)
   case Var(name: Token.Identifier)
 
-case class ParseError(message: String, token: Token) extends Throwable {
+case class ParseError(message: String, token: Token, tail: List[Token]) extends Throwable {
   override def getMessage = token match {
     case _ : Token.EOF => s"[line ${token.line}] Error at end of file: ${message}"
     case _ => s"[line ${token.line}] Error at '${token.lexeme}': ${message}"
@@ -39,16 +39,18 @@ case class ParseError(message: String, token: Token) extends Throwable {
 def parse(input: List[Token]): Either[ParseError, List[Statement]] =
   // TODO has to be some stdlib function for this
   @tailrec
-  def loop(input: List[Token], out: List[Statement]): List[Statement] = {
+  def loop(input: List[Token], out: List[Option[Statement]]): List[Option[Statement]] = {
     input.headOption match
       case Some(Token.EOF(_)) => out.reverse
       case _ =>
         val (remaining, statement) = Productions.declaration(input)
         loop(remaining, statement :: out)
   }
-  Try(loop(input, List.empty)).toEither.left.map {
-    case e: ParseError => e
-  }
+  Try(loop(input, List.empty)).toEither
+    .map(_.flatten)
+    .left.map {
+      case e: ParseError => e
+    }
 
 /**
  * TODO docblock
@@ -64,10 +66,12 @@ private def isSyncToken(t: Token) = t match
   case ReservedWord(_, `while`, _) => true
   case ReservedWord(_, `print`, _) => true
   case ReservedWord(_, `return`, _) => true
-  case _: Token.EOF => true // TODO maybe?
+  case _: Token.EOF => true
   case _ => false
 
 private def synchronize(input: List[Token]) = input.dropWhile(!isSyncToken(_))
+
+final case class NonEmptyList[+A](head: A, tail: List[A])
 
 private object Productions:
   import io.lox.Expression.*
@@ -90,20 +94,20 @@ private object Productions:
     }
     loop(in, left)
 
-  def declaration(input: List[Token]): (List[Token], Statement) =
-    input.head match {
-      case ReservedWord(_, `var`, _) => varDeclaration(input.drop(1))
-      case _ => statement(input)
+  def declaration(input: List[Token]): (List[Token], Option[Statement]) =
+    try {
+      val (out, stmt) = input.head match {
+        case ReservedWord(_, `var`, _) => varDeclaration(input.drop(1))
+        case _ => statement(input)
+      }
+      (out, Some(stmt))
+    } catch {
+      case (e: ParseError) =>
+        println(e.getMessage)
+        // TODO do better than stuffing this into `e`
+        val remaining = synchronize(e.tail)
+        (remaining, None)
     }
-// TODO figure out how synchronize is supposed to work
-//    try {}
-//    catch {
-//      case (e: ParseError) =>
-//        val remaining = synchronize(input)
-//        // TODO this is wrong
-//        // return null ???
-//        statement(remaining)
-//    }
 
   def varDeclaration(input: List[Token]) =
     // TODO unsafe
@@ -113,7 +117,7 @@ private object Productions:
         val (remaining, initializer) = expression(rest)
         remaining.head match
           case Semicolon(_) => (remaining.tail, Statement.Var(name, Some(initializer)))
-          case t => throw ParseError("Expect ';' after variable declaration.", t)
+          case t => throw ParseError("Expect ';' after variable declaration.", t, remaining)
       case _ => ???
 
   def statement(input: List[Token]) =
@@ -127,14 +131,14 @@ private object Productions:
     // TODO unsafe
     remaining.head match
       case _: Semicolon => (remaining.drop(1), Statement.Print(expr))
-      case t => throw ParseError("Expect ';' after value.", t)
+      case t => throw ParseError("Expect ';' after value.", t, remaining)
 
   def expressionStatement(input: List[Token]) =
     val (remaining, expr) = expression(input)
     // TODO unsafe
     remaining.head match
       case _: Semicolon => (remaining.drop(1), Statement.Expression(expr))
-      case t => throw ParseError("Expect ';' after expression.", t)
+      case t => throw ParseError("Expect ';' after expression.", t, remaining)
 
   def expression(input: List[Token]) = assignment(input)
 
@@ -149,7 +153,7 @@ private object Productions:
           case _ =>
             // TODO not supposed to throw here, just report
             // https://github.com/munificent/craftinginterpreters/blob/master/java/com/craftinginterpreters/lox/Lox.java#L109-L117
-            throw new ParseError("Invalid assignment target.", t)
+            throw ParseError("Invalid assignment target.", t, out)
       case _ => (out, expr)
 
   def equality(input: List[Token])   = binaryMatch[EqualEqual](comparison _)(input)
@@ -178,5 +182,5 @@ private object Productions:
         val (i, expr) = expression(input.drop(1))
         i.head match
           case t : RightParenthesis => (i.drop(1), Grouping(expr))
-          case t => throw ParseError("Expected ')' after expression", t)
-      case t => throw ParseError("Expected expression", t)
+          case t => throw ParseError("Expected ')' after expression", t, input)
+      case t => throw ParseError("Expected expression", t, input)
