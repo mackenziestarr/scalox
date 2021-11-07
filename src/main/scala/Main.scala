@@ -17,10 +17,8 @@ def runFile(fileName: String)(using Console): Unit =
   val source = Source.fromFile(fileName).mkString
   val res = run(source)
   res.left.foreach {
-    // TODO add better error handling
-    case e: RuntimeError => sys.exit(70)
-    case ScanErrors(errors) => sys.exit(64)
-    case ParseErrors(errors) => sys.exit(64)
+    case e : (ScanErrors | ParseErrors) => println(e.show); sys.exit(64)
+    case e : RuntimeError => println(e.show); sys.exit(74)
   }
 
 @tailrec
@@ -32,18 +30,13 @@ def runPrompt(using Console): Unit = {
   }
   val res = run(line)
   res.left.foreach {
-    // TODO add better error handling
-    case e: RuntimeError => println(e)
-    case ScanErrors(errors) => errors.map(_.show).foreach(println)
-    case ParseErrors(errors) => errors.map(_.getMessage).foreach(println)
+    case e : (ScanErrors | ParseErrors) => println(e.show)
+    case e : RuntimeError => println(e.show)
   }
   runPrompt
 }
 
-
-
-type Errors = ParseErrors | ScanErrors | RuntimeError
-
+type Errors = ScanErrors | ParseErrors | RuntimeError
 def run(in: String)(using Console): Either[Errors, Unit] =
   for
     tokens <- scan(in)

@@ -23,16 +23,6 @@ enum Expression:
   case Literal[T <: ExprValue ](value: T)
   case Var(name: Token.Identifier)
 
-case class ParseError(message: String, token: Token, tail: List[Token]) extends Throwable {
-  override def getMessage = token match {
-    case _ : Token.EOF => s"[line ${token.line}] Error at end of file: ${message}"
-    case _ => s"[line ${token.line}] Error at '${token.lexeme}': ${message}"
-  }
-}
-
-// TODO only added to overcome type erasure
-case class ParseErrors(u: List[ParseError])
-
 def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
   @tailrec
   def loop(input: List[Token], errors: List[ParseError], statements: List[Statement]): (List[ParseError], List[Statement]) = {

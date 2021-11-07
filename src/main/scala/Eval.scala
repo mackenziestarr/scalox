@@ -1,9 +1,6 @@
 import scala.collection.mutable
 import scala.util.Try
 
-class RuntimeError(val token: Token, message: String) extends RuntimeException(message):
-  def show = s"${message}\n[line ${token.line}]"
-
 object Environment:
   private val values = mutable.Map.empty[String, ExprValue]
   def assign(name: Token.Identifier, value: ExprValue) = {

@@ -2,12 +2,6 @@ import scala.annotation.tailrec
 import scala.collection.StringView
 import scala.util.Try
 
-// TODO only added these shell types to overcome type erasure
-final case class ScanErrors(u: List[ScanError])
-
-case class ScanError(message: String, line: Int, drop: Int):
-  def show: String = s"[line ${line}] Error: ${message}"
-
 // TODO: List or Vector pick one!
 def scan(in: String): Either[ScanErrors, List[Token]] =
   scan(in, 1, Vector.empty, Vector.empty)

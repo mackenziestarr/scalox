@@ -38,8 +38,7 @@ class ParseTest
       tokens <- scan("<= 1")
       parsed <- parse(tokens)
     } yield parsed
-    // TODO fix .toString
-    actual.left.value.toString shouldBe ParseErrors(List(ParseError("Expected expression", Token.LessThanEqual(1), List(EOF(1))))).toString
+    actual.left.value.show shouldBe ParseErrors(List(ParseError("Expected expression", Token.LessThanEqual(1), List(EOF(1))))).show
   }
   it should "parse variables" in {
     val actual = for {
