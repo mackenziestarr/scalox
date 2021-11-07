@@ -1,4 +1,3 @@
-package io.lox
 import scala.annotation.tailrec
 import scala.collection.StringView
 import scala.util.Try
@@ -57,10 +56,10 @@ private def token(in: String, line: Int): ScanError | Skip | Token =
     case x if isAlpha(x) => parseIdentifier(in, line)
     case _ => ScanError(s"Unexpected character: '$head'", line, 1)
 
-private def parseMultiLine(in: String, line: Int): io.lox.ScanError | io.lox.Skip =
+private def parseMultiLine(in: String, line: Int): ScanError | Skip =
   parseMultiLine(in.drop(2), line, "/*", 1, false)
 @tailrec
-private def parseMultiLine(in: String, line: Int, drop: String, nestingLevel: Int, hadError: Boolean): io.lox.ScanError | io.lox.Skip =
+private def parseMultiLine(in: String, line: Int, drop: String, nestingLevel: Int, hadError: Boolean): ScanError | Skip =
   if nestingLevel == 0 then
     if hadError
     then ScanError("Unterminated multi-line comment.", line, in.length + drop.length)

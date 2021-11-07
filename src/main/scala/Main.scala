@@ -1,9 +1,6 @@
-import io.lox.*
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.io.{Source, StdIn}
-import io.lox.Console
 
 @main def lox(args: String*): Unit =
   given Console = new Console:

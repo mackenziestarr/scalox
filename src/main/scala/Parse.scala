@@ -1,17 +1,11 @@
-package io.lox
-import io.lox.ReservedWords.*
-import io.lox.Token
-import io.lox.Token.{EqualEqual, Number, ReservedWord}
-import scala.collection.immutable.Nil
-import io.lox.ExprValue
-
+import ReservedWords.*
 import scala.annotation.tailrec
 import scala.util.Try
 
 enum Statement:
-  case Expression(expression: io.lox.Expression)
-  case Print(expression: io.lox.Expression)
-  case Var(name: Token.Identifier, initializer: Option[io.lox.Expression])
+  case Expr(expression: Expression)
+  case Print(expression: Expression)
+  case Var(name: Token.Identifier, initializer: Option[Expression])
 
 enum Expression:
   def show: String = this match {
@@ -37,7 +31,7 @@ case class ParseError(message: String, token: Token, tail: List[Token]) extends 
 }
 
 // TODO only added to overcome type erasure
-final case class ParseErrors(u: List[ParseError])
+case class ParseErrors(u: List[ParseError])
 
 def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
   @tailrec
@@ -58,6 +52,8 @@ def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
  * @param t
  * @return
  */
+import Token.ReservedWord
+import Token.ReservedWord.*
 private def isSyncToken(t: Token) = t match
   case ReservedWord(_, `class`, _) => true
   case ReservedWord(_, `fun`, _) => true
@@ -73,8 +69,8 @@ private def isSyncToken(t: Token) = t match
 private def synchronize(input: List[Token]) = input.dropWhile(!isSyncToken(_))
 
 private object Productions:
-  import io.lox.Expression.*
-  import io.lox.Token.*
+  import Expression.*
+  import Token.*
   type Comparison = GreaterThan | GreaterThanEqual | LessThan | LessThanEqual
   type Term = Minus | Plus
   type Factor = Star | Slash
@@ -134,7 +130,7 @@ private object Productions:
     val (remaining, expr) = expression(input)
     // TODO unsafe
     remaining.head match
-      case _: Semicolon => (remaining.drop(1), Statement.Expression(expr))
+      case _: Semicolon => (remaining.drop(1), Statement.Expr(expr))
       case t => throw ParseError("Expect ';' after expression.", t, remaining)
 
   def expression(input: List[Token]) = assignment(input)

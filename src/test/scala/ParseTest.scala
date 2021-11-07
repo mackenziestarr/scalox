@@ -1,6 +1,5 @@
-import io.lox.{ParseError, Statement, Token, parse, scan}
-import io.lox.Expression.*
-import io.lox.Token.*
+import Expression.*
+import Token.*
 import org.scalatest.EitherValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.*
@@ -18,7 +17,7 @@ class ParseTest
     } yield parsed
     actual.value shouldBe
       Seq(
-        Statement.Expression(
+        Statement.Expr(
           Binary(
           Binary(
             Literal(1.0d),
@@ -39,7 +38,8 @@ class ParseTest
       tokens <- scan("<= 1")
       parsed <- parse(tokens)
     } yield parsed
-    actual.left.value shouldBe ParseError("Expected expression", Token.LessThanEqual(1), List(EOF(1)))
+    // TODO fix .toString
+    actual.left.value.toString shouldBe ParseErrors(List(ParseError("Expected expression", Token.LessThanEqual(1), List(EOF(1))))).toString
   }
   it should "parse variables" in {
     val actual = for {
@@ -49,7 +49,7 @@ class ParseTest
     actual.value shouldBe Seq(
       Statement.Var(Identifier("fruit", 1), Some(Literal("apple"))),
       Statement.Var(Identifier("vegetable", 2), None),
-      Statement.Expression(Var(Identifier("fruit", 3)))
+      Statement.Expr(Var(Identifier("fruit", 3)))
     )
   }
   it should "parse complex" in {
@@ -58,7 +58,7 @@ class ParseTest
       parsed <- parse(tokens)
     } yield parsed
     actual.value shouldBe
-      Seq(Statement.Expression(
+      Seq(Statement.Expr(
         Binary(
         Binary(
           Binary(

@@ -1,8 +1,5 @@
-import io.lox.Token.EOF
-import io.lox.Token
-import io.lox.Token.*
-import io.lox.ReservedWords.*
-import io.lox.scan
+import Token.*
+import ReservedWords.*
 import org.scalatest.EitherValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should._

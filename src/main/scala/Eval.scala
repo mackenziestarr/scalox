@@ -1,11 +1,3 @@
-package io.lox
-
-import io.lox.Expression
-import io.lox.ExprValue
-import io.lox.Token
-import io.lox.Expression.*
-import io.lox.Statement
-
 import scala.collection.mutable
 import scala.util.Try
 
@@ -52,7 +44,7 @@ def eval(statements: Seq[Statement])(using Console): Either[RuntimeError, Unit] 
   }
 
 private[this] object Eval:
-  import io.lox.Token.{String as _, *}
+  import Token.{String as _, *}
   def isTruthy(value: ExprValue): Boolean = value match
     case _: Null => false
     case b: Boolean => b
@@ -60,10 +52,12 @@ private[this] object Eval:
 
   def eval[A](statement: Statement)(using Console): Unit = statement match {
     case Statement.Print(expr) => summon[Console].println(ExprResult.from(eval(expr)).show)
-    case Statement.Expression(expr) => eval(expr)
+    case Statement.Expr(expr) => eval(expr)
     case Statement.Var(name, initializer) =>
       Environment.define(name.lexeme, initializer.map(eval(_)))
   }
+
+  import Expression.*
   def eval(expr: Expression): ExprValue = expr match
     case Assign(name, expr) =>
       val value = eval(expr)

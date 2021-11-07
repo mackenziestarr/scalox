@@ -1,9 +1,7 @@
 import run as runLox
-import io.lox.ExprResult
 import org.scalatest.EitherValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.*
-import io.lox.Console
 
 class EvalTest
   extends AnyFlatSpec
