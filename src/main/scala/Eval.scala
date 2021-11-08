@@ -1,5 +1,26 @@
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Try
+
+
+class Environment(parent: Option[Environment]):
+  private val values = mutable.Map.empty[String, ExprValue]
+  def define(name: String, value: Option[ExprValue]) = values.update(name, value.getOrElse(null))
+  def assign(name: Token.Identifier, value: ExprValue): Unit = {
+    if values.contains(name.lexeme) then define(name.lexeme, Some(value))
+    else parent match
+      case Some(env) => env.assign(name, value)
+      case None => throw new RuntimeError(name, s"Undefined variable '${name.lexeme}'.")
+  }
+  def get(name: Token.Identifier): ExprValue =
+    if values.contains(name.lexeme) then
+      values.getOrElse(name.lexeme,
+        throw new RuntimeError(name, s"Undefined variable '${name.lexeme}'."))
+    else
+      parent match {
+      case Some(env) => env.get(name)
+      case None => throw new RuntimeError(name, s"Undefined variable '${name.lexeme}'.")
+    }
 
 object Environment:
   private val values = mutable.Map.empty[String, ExprValue]
@@ -9,7 +30,7 @@ object Environment:
   }
   def define(name: String, value: Option[ExprValue]) = values.update(name, value.getOrElse(null))
   def get(name: Token.Identifier) = values.getOrElse(name.lexeme,
-    throw new RuntimeError(name, s"Undefined variable `${name.lexeme}`.")
+    throw new RuntimeError(name, s"Undefined variable '${name.lexeme}'.")
   )
 
 type ExprValue = String | Double | Boolean | Null
@@ -19,12 +40,12 @@ opaque type ExprResult = ExprValue
 object ExprResult:
   def from(value: ExprValue): ExprResult = value
   def show(value: ExprResult): String = value match
-    case _ : Null => "nil"
+    case null => "nil"
     case d : Double =>
       val s : String = d.toString
       val (left, right) = s.span(_ != '.')
       if right == ".0" then left else s
-    case s: String => s"\"$s\""
+    case s: String => s
     case _ => value.toString
 extension (e: ExprResult)
   def show: String = ExprResult.show(e)
@@ -43,7 +64,7 @@ def eval(statements: Seq[Statement])(using Console): Either[RuntimeError, Unit] 
 private[this] object Eval:
   import Token.{String as _, *}
   def isTruthy(value: ExprValue): Boolean = value match
-    case _: Null => false
+    case null => false
     case b: Boolean => b
     case _ => true
 
@@ -62,14 +83,14 @@ private[this] object Eval:
       value
     case Literal(value) => value
     case Grouping(expr) => eval(expr)
-    case Var(identifier) => Environment.get(identifier)
+    case Var(identifier) =>Environment.get(identifier)
     case Unary(op, right) =>
       val value = eval(right)
       op match
         case _: Minus => value match
           case value: Double => -value.asInstanceOf[Double]
           // TODO would like to use value.show here from ExprResult
-          case _ => throw new RuntimeError(op, s"Operand must be a number in '${op.lexeme}$value'")
+          case _ => throw new RuntimeError(op, s"Operand must be a number.")
         case _: Bang => !isTruthy(value)
         case _ => throw new RuntimeError(op, s"Operator not supported: '${op.lexeme}$value'")
     case Binary(left, op, right) =>
@@ -96,7 +117,9 @@ private[this] object Eval:
         case (left, right) => op match {
           case _: EqualEqual => left == right
           case _: BangEqual => left != right
-          case _ => throw new RuntimeError(op, s"Operator not supported: '$left ${op.lexeme} $right'")
+          case _: Plus => throw new RuntimeError(op, s"Operands must be two numbers or two strings.")
+          case _ => throw new RuntimeError(op, s"Operands must be numbers.")
+          //case _ => throw new RuntimeError(op, s"Operator not supported: '$left ${op.lexeme} $right'")
         }
 
 

@@ -27,9 +27,6 @@ private def token(in: String, line: Int): ScanError | Skip | Token =
     case '{' => LeftBracket(line)
     case '}' => RightBracket(line)
     case ',' => Comma(line)
-    case '.' if tail.headOption.exists(isDigit) =>
-      val digit = tail.takeWhile(isDigit)
-      ScanError(s"Invalid numeric syntax, found '.$digit' expected '0.$digit'", line, digit.length + 1)
     case '.' => Dot(line)
     case '+' => Plus(line)
     case '-' => Minus(line)

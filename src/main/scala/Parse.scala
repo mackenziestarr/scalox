@@ -61,6 +61,7 @@ private def synchronize(input: List[Token]) = input.dropWhile(!isSyncToken(_))
 private object Productions:
   import Expression.*
   import Token.*
+  type Equality = EqualEqual | BangEqual
   type Comparison = GreaterThan | GreaterThanEqual | LessThan | LessThanEqual
   type Term = Minus | Plus
   type Factor = Star | Slash
@@ -101,6 +102,7 @@ private object Productions:
         remaining.head match
           case Semicolon(_) => (remaining.tail, Statement.Var(name, Some(initializer)))
           case t => throw ParseError("Expect ';' after variable declaration.", t, remaining)
+      case head :: rest => throw ParseError("Expect variable name.", head, input)
       case _ => ???
 
   def statement(input: List[Token]) =
@@ -139,7 +141,7 @@ private object Productions:
             throw ParseError("Invalid assignment target.", t, out)
       case _ => (out, expr)
 
-  def equality(input: List[Token])   = binaryMatch[EqualEqual](comparison _)(input)
+  def equality(input: List[Token])   = binaryMatch[Equality](comparison _)(input)
   def comparison(input: List[Token]) = binaryMatch[Comparison](term _)(input)
   def term(input: List[Token])       = binaryMatch[Term](factor _)(input)
   def factor(input: List[Token])     = binaryMatch[Factor](unary _)(input)
@@ -166,4 +168,4 @@ private object Productions:
         i.head match
           case t : RightParenthesis => (i.drop(1), Grouping(expr))
           case t => throw ParseError("Expected ')' after expression", t, input)
-      case t => throw ParseError("Expected expression", t, input)
+      case t => throw ParseError("Expect expression.", t, input)
