@@ -45,14 +45,14 @@ def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
 import TokenType.{ReservedWord, EOF}
 import TokenType.ReservedWord.*
 private def isSyncToken(t: TokenType) = t match
-  case ReservedWord(_, `class`) => true
-  case ReservedWord(_, `fun`) => true
-  case ReservedWord(_, `var`) => true
-  case ReservedWord(_, `for`) => true
-  case ReservedWord(_, `if`) => true
-  case ReservedWord(_, `while`) => true
-  case ReservedWord(_, `print`) => true
-  case ReservedWord(_, `return`) => true
+  case ReservedWord(`class`) => true
+  case ReservedWord(`fun`) => true
+  case ReservedWord(`var`) => true
+  case ReservedWord(`for`) => true
+  case ReservedWord(`if`) => true
+  case ReservedWord(`while`) => true
+  case ReservedWord(`print`) => true
+  case ReservedWord(`return`) => true
   case EOF => true
   case _ => false
 
@@ -84,7 +84,7 @@ private object Productions:
   def declaration(input: List[Token]): (List[Token], Statement | ParseError) =
     try {
       input.head match {
-        case Token(ReservedWord(_, `var`)) => varDeclaration(input.tail)
+        case Token(ReservedWord(`var`)) => varDeclaration(input.tail)
         case _ => statement(input)
       }
     } catch {
@@ -109,7 +109,7 @@ private object Productions:
   def statement(input: List[Token]) =
     // TODO unsafe
     input.head match
-      case Token(ReservedWord(_, `print`)) => printStatement(input.drop(1))
+      case Token(ReservedWord(`print`)) => printStatement(input.drop(1))
       case _ => expressionStatement(input)
 
   def printStatement(input: List[Token]) =
@@ -164,9 +164,9 @@ private object Productions:
       // TODO move double conversion here
       case t : TokenType.Number => (input.drop(1), Literal(t.value))
       case _ : Identifier => (input.drop(1), Var(token))
-      case ReservedWord(lexeme, `true`) => (input.drop(1), Literal(true))
-      case ReservedWord(lexeme, `false`) => (input.drop(1), Literal(false))
-      case ReservedWord(lexeme, `nil`) => (input.drop(1), Literal(null))
+      case ReservedWord(`true`) => (input.drop(1), Literal(true))
+      case ReservedWord(`false`) => (input.drop(1), Literal(false))
+      case ReservedWord(`nil`) => (input.drop(1), Literal(null))
       case LeftParenthesis =>
         val (i, expr) = expression(input.drop(1))
         i.head match

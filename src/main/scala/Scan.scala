@@ -129,6 +129,10 @@ enum TokenType(val lexeme: String):
   case Identifier(override val lexeme: Predef.String) extends TokenType(lexeme)
   case EOF extends TokenType("EOF")
 
+object TokenType:
+  object ReservedWord:
+    def unapply(r: TokenType.ReservedWord) = Some(r.`type`)
+
 enum ReservedWords:
   case `and`
   case `class`
