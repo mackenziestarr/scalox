@@ -1,9 +1,9 @@
 import Expression.*
-import Token.*
+import TokenType.*
 import org.scalatest.EitherValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.*
-
+/*
 class ParseTest
   extends AnyFlatSpec
   with EitherValues
@@ -21,14 +21,14 @@ class ParseTest
           Binary(
           Binary(
             Literal(1.0d),
-            EqualEqual(1),
+            EqualEqual,
             Literal(2.0d)
           ),
-          EqualEqual(1),
+          EqualEqual,
           Grouping(
             Binary(
               Literal(3.0d),
-              EqualEqual(1),
+              EqualEqual,
               Literal(4.0d))))
         )
       )
@@ -86,4 +86,4 @@ class ParseTest
               Literal(7.0d),
               Slash(1),
               Literal(8.0d)))))))
-  }
+  }*/

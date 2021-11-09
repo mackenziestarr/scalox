@@ -8,43 +8,45 @@ def scan(in: String): Either[ScanErrors, List[Token]] =
 
 @tailrec
 private def scan(in: String, line: Int, errors: Vector[ScanError], tokens: Vector[Token]): Either[ScanErrors, List[Token]] =
-  if in.isEmpty then Either.cond(errors.isEmpty, tokens.appended(Token.EOF(line)).toList, ScanErrors(errors.toList))
+  if in.isEmpty then 
+    val eof = Token("EOF", TokenType.EOF, line)
+    Either.cond(errors.isEmpty, tokens.appended(eof).toList, ScanErrors(errors.toList))
   else
     val (n, inc, errorOpt, tokenOpt) = token(in, line) match {
-      case t : Token.String           => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(t))
-      case t : Token                  => (t.lexeme.length, 0, None, Some(t))
-      case Skip(length, newLines)     => (length, newLines, None, None)
+      case t : TokenType.String   => (t.lexeme.length + 2, t.lexeme.count(_ == '\n'), None, Some(Token(t.lexeme, t, line)))
+      case t : TokenType          => (t.lexeme.length, 0, None, Some(Token(t.lexeme, t, line)))
+      case Skip(length, newLines) => (length, newLines, None, None)
       case s : ScanError => (s.drop, 0, Some(s), None)
     }
     scan(in.drop(n), line + inc, errors ++ errorOpt, tokens ++ tokenOpt)
 
-private def token(in: String, line: Int): ScanError | Skip | Token =
-  import Token._
+private def token(in: String, line: Int): ScanError | Skip | TokenType =
+  import TokenType._
   val (head, tail) = (in.head, in.tail)
   head match
-    case '(' => LeftParenthesis(line)
-    case ')' => RightParenthesis(line)
-    case '{' => LeftBracket(line)
-    case '}' => RightBracket(line)
-    case ',' => Comma(line)
-    case '.' => Dot(line)
-    case '+' => Plus(line)
-    case '-' => Minus(line)
-    case ';' => Semicolon(line)
-    case '*' => Star(line)
-    case '!' => if tail.headOption == Some('=') then BangEqual(line) else Bang(line)
-    case '=' => if tail.headOption == Some('=') then EqualEqual(line) else Equal(line)
-    case '<' => if tail.headOption == Some('=') then LessThanEqual(line) else LessThan(line)
-    case '>' => if tail.headOption == Some('=') then GreaterThanEqual(line) else GreaterThan(line)
+    case '(' => LeftParenthesis
+    case ')' => RightParenthesis
+    case '{' => LeftBracket
+    case '}' => RightBracket
+    case ',' => Comma
+    case '.' => Dot
+    case '+' => Plus
+    case '-' => Minus
+    case ';' => Semicolon
+    case '*' => Star
+    case '!' => if tail.headOption == Some('=') then BangEqual else Bang
+    case '=' => if tail.headOption == Some('=') then EqualEqual else Equal
+    case '<' => if tail.headOption == Some('=') then LessThanEqual else LessThan
+    case '>' => if tail.headOption == Some('=') then GreaterThanEqual else GreaterThan
     case '/' => tail.headOption match
       case Some('/') => Skip(in.takeWhile(_ != '\n').length, 0)
       case Some('*') => parseMultiLine(in, line)
-      case _ => Slash(line)
+      case _ => Slash
     case ' ' | '\r' | '\t' => Skip(1, 0)
     case '\n' => Skip(1, 1)
     case '"' => parseString(in, line)
     case x if isDigit(x) => parseNumber(in, line)
-    case x if isAlpha(x) => parseIdentifier(in, line)
+    case x if isAlpha(x) => parseIdentifier(in)
     case _ => ScanError(s"Unexpected character: '$head'", line, 1)
 
 private def parseMultiLine(in: String, line: Int): ScanError | Skip =
@@ -62,31 +64,31 @@ private def parseMultiLine(in: String, line: Int, drop: String, nestingLevel: In
         case i => parseMultiLine(in.drop(i + 2), line, drop + in.substring(0, i) + "*/", nestingLevel - 1, false)
       case i => parseMultiLine(in.drop(i + 2), line, drop + in.substring(0, i) + "/*", nestingLevel + 1, false)
 
-private def parseString(in: String, line: Int): ScanError | Token =
+private def parseString(in: String, line: Int): ScanError | TokenType =
   val (str, rest) = in.tail.span(_ != '"')
   if rest.headOption == Some('"') then
-    Token.String(str, str, line)
+    TokenType.String(str, str)
   else ScanError("Unterminated string.", line, in.length)
 
 private def isDigit(c: Char): Boolean = ('0' to '9').containsTyped(c)
 private def isAlpha(c: Char): Boolean = ('a' to 'z').containsTyped(c) || ('A' to 'Z').containsTyped(c) || c == '_'
 private def isAlphaNumeric(c: Char): Boolean = isAlpha(c) || isDigit(c)
 
-private def parseNumber(in: String, line: Int): ScanError | Token =
+private def parseNumber(in: String, line: Int): ScanError | TokenType =
   val (prefix, rest) = in.span(isDigit)
   val suffix: String = if rest.headOption == Some('.') then "." + rest.tail.takeWhile(isDigit) else ""
   val lexeme = prefix + suffix
   if (suffix == ".") then
     ScanError(s"Invalid numeric syntax, found '${prefix}.' expected '${prefix}.0'", line, lexeme.length)
   else
-    Token.Number(lexeme, lexeme.toDouble, line)
+    TokenType.Number(lexeme, lexeme.toDouble)
 
-private def parseIdentifier(in: String, line: Int) =
+private def parseIdentifier(in: String) =
   val word = in.takeWhile(isAlphaNumeric)
   Try(ReservedWords.valueOf(word))
     .toOption
-    .fold(Token.Identifier(word, line)) {
-      Token.ReservedWord(word, _, line)
+    .fold(TokenType.Identifier(word)) {
+      TokenType.ReservedWord(word, _)
     }
 
 /**
@@ -97,31 +99,35 @@ private def parseIdentifier(in: String, line: Int) =
  */
 private case class Skip(length: Int, newLines: Int)
 
-enum Token(val lexeme: String, val line: Int):
-  case LeftParenthesis(l: Int) extends Token("(", l)
-  case RightParenthesis(l: Int) extends Token(")", l)
-  case LeftBracket(l: Int) extends Token("{", l)
-  case RightBracket(l: Int) extends Token("}", l)
-  case Comma(l: Int) extends Token(",", l)
-  case Dot(l: Int) extends Token(".", l)
-  case Minus(l: Int) extends Token("-", l)
-  case Plus(l: Int) extends Token("+", l)
-  case Semicolon(l: Int) extends Token(";", l)
-  case Slash(l: Int) extends Token("/", l)
-  case Star(l: Int) extends Token("*", l)
-  case Bang(l: Int) extends Token("!", l)
-  case BangEqual(l: Int) extends Token("!=", l)
-  case Equal(l: Int) extends Token("=", l)
-  case EqualEqual(l: Int) extends Token("==", l)
-  case LessThanEqual(l: Int) extends Token("<=", l)
-  case LessThan(l: Int) extends Token("<", l)
-  case GreaterThanEqual(l: Int) extends Token(">=", l)
-  case GreaterThan(l: Int) extends Token(">", l)
-  case String(override val lexeme: Predef.String, value: Predef.String, l: Int) extends Token(lexeme, l)
-  case Number(override val lexeme: Predef.String, value: Double, l: Int) extends Token(lexeme, l)
-  case ReservedWord(override val lexeme: Predef.String, `type`: ReservedWords, l: Int) extends Token(lexeme, l)
-  case Identifier(override val lexeme: Predef.String, l: Int) extends Token(lexeme, l)
-  case EOF(l: Int) extends Token("EOF", l)
+case class Token(lexeme: String, `type`: TokenType, line: Int)
+object Token:
+  def unapply(t: Token) = Some(t.`type`)
+
+enum TokenType(val lexeme: String):
+  case LeftParenthesis extends TokenType("(")
+  case RightParenthesis extends TokenType(")")
+  case LeftBracket extends TokenType("{")
+  case RightBracket extends TokenType("}")
+  case Comma extends TokenType(",")
+  case Dot extends TokenType(".")
+  case Minus extends TokenType("-")
+  case Plus extends TokenType("+")
+  case Semicolon extends TokenType(";")
+  case Slash extends TokenType("/")
+  case Star extends TokenType("*")
+  case Bang extends TokenType("!")
+  case BangEqual extends TokenType("!=")
+  case Equal extends TokenType("=")
+  case EqualEqual extends TokenType("==")
+  case LessThanEqual extends TokenType("<=")
+  case LessThan extends TokenType("<")
+  case GreaterThanEqual extends TokenType(">=")
+  case GreaterThan extends TokenType(">")
+  case String(override val lexeme: Predef.String, value: Predef.String) extends TokenType(lexeme)
+  case Number(override val lexeme: Predef.String, value: Double) extends TokenType(lexeme)
+  case ReservedWord(override val lexeme: Predef.String, `type`: ReservedWords) extends TokenType(lexeme)
+  case Identifier(override val lexeme: Predef.String) extends TokenType(lexeme)
+  case EOF extends TokenType("EOF")
 
 enum ReservedWords:
   case `and`
