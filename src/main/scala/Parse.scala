@@ -160,10 +160,9 @@ private object Productions:
     // TODO unsafe
     val token = input.head
     token.`type` match
-      case t : TokenType.String => (input.drop(1), Literal(t.value))
-      // TODO move double conversion here
-      case t : TokenType.Number => (input.drop(1), Literal(t.value))
-      case _ : Identifier => (input.drop(1), Var(token))
+      case TokenType.String(lexeme) => (input.drop(1), Literal(lexeme))
+      case TokenType.Number(lexeme) => (input.drop(1), Literal(lexeme.toDouble))
+      case Identifier(_) => (input.drop(1), Var(token))
       case ReservedWord(`true`) => (input.drop(1), Literal(true))
       case ReservedWord(`false`) => (input.drop(1), Literal(false))
       case ReservedWord(`nil`) => (input.drop(1), Literal(null))

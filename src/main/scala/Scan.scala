@@ -67,7 +67,7 @@ private def parseMultiLine(in: String, line: Int, drop: String, nestingLevel: In
 private def parseString(in: String, line: Int): ScanError | TokenType =
   val (str, rest) = in.tail.span(_ != '"')
   if rest.headOption == Some('"') then
-    TokenType.String(str, str)
+    TokenType.String(str)
   else ScanError("Unterminated string.", line, in.length)
 
 private def isDigit(c: Char): Boolean = ('0' to '9').containsTyped(c)
@@ -81,7 +81,7 @@ private def parseNumber(in: String, line: Int): ScanError | TokenType =
   if (suffix == ".") then
     ScanError(s"Invalid numeric syntax, found '${prefix}.' expected '${prefix}.0'", line, lexeme.length)
   else
-    TokenType.Number(lexeme, lexeme.toDouble)
+    TokenType.Number(lexeme)
 
 private def parseIdentifier(in: String) =
   val word = in.takeWhile(isAlphaNumeric)
@@ -100,6 +100,7 @@ private def parseIdentifier(in: String) =
 private case class Skip(length: Int, newLines: Int)
 
 case class Token(lexeme: String, `type`: TokenType, line: Int)
+
 object Token:
   def unapply(t: Token) = Some(t.`type`)
 
@@ -123,8 +124,8 @@ enum TokenType(val lexeme: String):
   case LessThan extends TokenType("<")
   case GreaterThanEqual extends TokenType(">=")
   case GreaterThan extends TokenType(">")
-  case String(override val lexeme: Predef.String, value: Predef.String) extends TokenType(lexeme)
-  case Number(override val lexeme: Predef.String, value: Double) extends TokenType(lexeme)
+  case String(override val lexeme: Predef.String) extends TokenType(lexeme)
+  case Number(override val lexeme: Predef.String) extends TokenType(lexeme)
   case ReservedWord(override val lexeme: Predef.String, `type`: ReservedWords) extends TokenType(lexeme)
   case Identifier(override val lexeme: Predef.String) extends TokenType(lexeme)
   case EOF extends TokenType("EOF")
