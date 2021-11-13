@@ -117,7 +117,7 @@ private object Productions:
     def loop(input: List[Token], statements: List[Statement]): (List[Token], List[Statement]) = {
       input.headOption match {
         case Some(Token(EOF)) => (input, statements.reverse)
-        case Some(Token(RightBracket)) => (input.tail, statements.reverse)
+        case Some(Token(RightBracket)) => (input, statements.reverse)
         case _ =>
           val (remaining, statement) = declaration(input)
           loop(remaining, statement :: statements)
