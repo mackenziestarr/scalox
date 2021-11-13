@@ -29,7 +29,7 @@ class EvalTest
         | print a - b;
         | print a = 4;
         |""".stripMargin
-    val actual: Either[Errors, Unit] = runLox(program)
+    val actual: Either[Errors, Environment] = runLox(program, new Environment(None))
     // TODO figure out how to report error for Left(_)
     actual.isRight shouldBe true
     console.get shouldBe List("556", "272", "4")
