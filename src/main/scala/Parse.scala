@@ -1,8 +1,10 @@
 import ReservedWords.*
+
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 enum Statement:
+  case Block(statements: List[Statement])
   case Expr(expression: Expression)
   case Print(expression: Expression)
   case Var(name: Token, initializer: Option[Expression])
@@ -29,10 +31,12 @@ def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
     input.headOption match
       case Some(Token(TokenType.EOF)) => (errors.reverse, statements.reverse)
       case _ =>
-        val (remaining, result) = Productions.declaration(input)
-        result match
-          case statement: Statement => loop(remaining, errors, statement :: statements)
-          case error: ParseError => loop(remaining, error :: errors, statements)
+        Try(Productions.declaration(input)) match {
+          case Success((remaining, statement)) => loop(remaining, errors, statement :: statements)
+          case Failure(e: ParseError) => // TODO do better than stuffing this into `e`
+            val remaining = synchronize(e.tail)
+            loop(remaining, e :: errors, statements)
+        }
   }
   val (errors, statements) = loop(input, List.empty, List.empty)
   Either.cond(errors.isEmpty, statements, ParseErrors(errors))
@@ -81,17 +85,10 @@ private object Productions:
     }
     loop(in, left)
 
-  def declaration(input: List[Token]): (List[Token], Statement | ParseError) =
-    try {
-      input.head match {
-        case Token(ReservedWord(`var`)) => varDeclaration(input.tail)
-        case _ => statement(input)
-      }
-    } catch {
-      case (e: ParseError) =>
-        // TODO do better than stuffing this into `e`
-        val remaining = synchronize(e.tail)
-        (remaining, e)
+  def declaration(input: List[Token]): (List[Token], Statement) =
+    input.head match {
+      case Token(ReservedWord(`var`)) => varDeclaration(input.tail)
+      case _ => statement(input)
     }
 
   def varDeclaration(input: List[Token]) =
@@ -106,11 +103,33 @@ private object Productions:
       case head :: rest => throw ParseError("Expect variable name.", head, input)
       case _ => ???
 
-  def statement(input: List[Token]) =
+  def statement(input: List[Token]): (List[Token], Statement) =
     // TODO unsafe
     input.head match
+      case Token(LeftBracket) =>
+        val (remaining, statements) = block(input.drop(1))
+        (remaining, Statement.Block(statements))
       case Token(ReservedWord(`print`)) => printStatement(input.drop(1))
       case _ => expressionStatement(input)
+
+  def block(input: List[Token]): (List[Token], List[Statement]) =
+    @tailrec
+    def loop(input: List[Token], statements: List[Statement]): (List[Token], List[Statement]) = {
+      input.headOption match {
+        case Some(Token(EOF)) => (input, statements.reverse)
+        case Some(Token(RightBracket)) => (input.tail, statements.reverse)
+        case _ =>
+          val (remaining, statement) = declaration(input)
+          loop(remaining, statement :: statements)
+      }
+    }
+    val (remaining, statements) = loop(input, List.empty)
+    remaining.head match
+      case Token(RightBracket) => (remaining.tail, statements)
+      case Token(EOF) => (remaining, statements)
+      case t => throw new ParseError("Expect '}' after block.", t, remaining)
+
+
 
   def printStatement(input: List[Token]) =
     val (remaining, expr) = expression(input)

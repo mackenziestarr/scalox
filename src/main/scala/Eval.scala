@@ -60,14 +60,21 @@ private[this] object Eval:
     case _ => true
 
   def eval[A](statement: Statement)(using Console): State[Environment, Unit] =
+    import Statement.*
     State {
       env => statement match {
-        case Statement.Print(expr) =>
+        case Block(statements) =>
+          statements.foldLeft(new Environment(Some(env))) {
+            (env, statement) =>
+              eval(statement).runS(env)
+          }
+          ((), env)
+        case Print(expr) =>
           eval(expr).map {
             e => summon[Console].println(ExprResult.from(e).show)
           }.run(env)
-        case Statement.Expr(expr) => eval(expr).discard.run(env)
-        case Statement.Var(name, initializer) =>
+        case Expr(expr) => eval(expr).discard.run(env)
+        case Var(name, initializer) =>
           env.define(name.lexeme, initializer.map { expr =>
             eval(expr).runA(env)
           })
