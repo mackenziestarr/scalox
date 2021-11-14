@@ -63,6 +63,11 @@ private[this] object Eval:
     import Statement.*
     State {
       env => statement match {
+        case If(expression, thenBranch, elseBranch) =>
+          eval(expression).flatMap { value =>
+            if isTruthy(value) then eval(thenBranch)
+            else elseBranch.map(eval(_)).getOrElse(State.unit(()))
+          }.run(env)
         case Block(statements) =>
           statements.foldLeft(new Environment(Some(env))) {
             (env, statement) =>

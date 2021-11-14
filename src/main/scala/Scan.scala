@@ -2,7 +2,6 @@ import scala.annotation.tailrec
 import scala.collection.StringView
 import scala.util.Try
 
-// TODO: List or Vector pick one!
 def scan(in: String): Either[ScanErrors, List[Token]] =
   scan(in, 1, Vector.empty, Vector.empty)
 
