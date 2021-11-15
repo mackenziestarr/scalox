@@ -3,15 +3,12 @@ import scala.collection.mutable
 import scala.io.{Source, StdIn}
 import scala.Console.err as StdErr
 
-@main def lox(args: String*): Unit =
-  given Console = new Console:
-    override def println(s: String) = scala.Predef.println(s)
-  args match
+@main def lox(args: String*): Unit = args match
     case Nil => runPrompt
     case fileName :: Nil => runFile(fileName)
     case _ => println("Usage: slox [script]"); sys.exit(64)
 
-def runFile(fileName: String)(using Console): Unit =
+def runFile(fileName: String): Unit =
   val source = Source.fromFile(fileName).mkString
   val res = run(source, new Environment(None))
   res.left.foreach {
@@ -19,9 +16,9 @@ def runFile(fileName: String)(using Console): Unit =
     case e : RuntimeError => StdErr.println(e.show); sys.exit(70)
   }
 
-def runPrompt(using Console): Unit = runPrompt(new Environment(None))
+def runPrompt: Unit = runPrompt(new Environment(None))
 @tailrec
-def runPrompt(env: Environment)(using Console): Unit = {
+def runPrompt(env: Environment): Unit = {
   print("> ")
   val line = StdIn.readLine
   if (line == null) {
@@ -37,7 +34,7 @@ def runPrompt(env: Environment)(using Console): Unit = {
 
 type Errors = ScanErrors | ParseErrors | RuntimeError
 
-def run(in: String, env: Environment)(using Console): Either[Errors, Environment] =
+def run(in: String, env: Environment): Either[Errors, Environment] =
   for
     tokens <- scan(in)
     parsed <- parse(tokens)

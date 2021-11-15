@@ -31,10 +31,7 @@ def display(value: ExprValue) = value match
     if right == ".0" then left else original
   case _ => value.toString
 
-trait Console:
-  def println(s: String): Unit
-
-def eval(statements: Seq[Statement], env: Environment)(using Console): Either[RuntimeError, Environment] =
+def eval(statements: Seq[Statement], env: Environment): Either[RuntimeError, Environment] =
   Try {
     statements.foldLeft(env) {
       (env, statement) => Eval.eval(statement).runS(env)
@@ -50,7 +47,7 @@ private[this] object Eval:
     case b: Boolean => b
     case _ => true
 
-  def eval[A](statement: Statement)(using Console): State[Environment, Unit] =
+  def eval[A](statement: Statement): State[Environment, Unit] =
     import Statement.*
     State {
       env => statement match {
@@ -71,7 +68,7 @@ private[this] object Eval:
           ((), env)
         case Print(expr) =>
           eval(expr).map {
-            e => summon[Console].println(display(e))
+            e => println(display(e))
           }.run(env)
         case Expr(expr) => eval(expr).discard.run(env)
         case Var(name, initializer) =>
@@ -144,7 +141,6 @@ private[this] object Eval:
               case _ => throw new RuntimeError(op, s"Operands must be numbers.")
             }
           }.run(env)
-
     }
 
 

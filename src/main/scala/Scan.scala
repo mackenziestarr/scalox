@@ -101,6 +101,7 @@ private case class Skip(length: Int, newLines: Int)
 case class Token(lexeme: String, `type`: TokenType, line: Int)
 
 object Token:
+  def apply(`type`: TokenType, line: Int): Token = Token(`type`.lexeme, `type`, line)
   def unapply(t: Token) = Some(t.`type`)
 
 enum TokenType(val lexeme: String):
