@@ -8,3 +8,8 @@ This is a normal sbt project. You can compile code with `sbt compile`, run it wi
 
 For more information on the sbt-dotty plugin, see the
 [dotty-example-project](https://github.com/lampepfl/dotty-example-project/blob/master/README.md).
+
+### Testing
+
+Tested via [test suite](https://github.com/munificent/craftinginterpreters#testing) included with crafting
+interpreters repo
