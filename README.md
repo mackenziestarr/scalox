@@ -1,4 +1,6 @@
-## lox3s
+## scalox
+
+tree-walk interpreter for the Lox programming language written in Scala 3
 
 ### Usage
 
