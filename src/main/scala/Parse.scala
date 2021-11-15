@@ -17,7 +17,7 @@ enum Expression:
     case Binary(left, operator, right) => s"(${operator.lexeme} ${left.show} ${right.show})"
     case Unary(operator, right) => s"(${operator.lexeme} ${right.show})"
     case Grouping(expr) => s"(group ${expr.show})"
-    case l: Literal[?] => ExprResult.from(l.value).show
+    case l: Literal[?] => display(l.value)
     case Var(name) => s"`${name.lexeme}`"
   }
   case Assign(name: Token, expr: Expression)

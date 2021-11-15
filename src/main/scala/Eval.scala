@@ -2,7 +2,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Try
 
-
 class Environment(parent: Option[Environment]):
   private val values = mutable.Map.empty[String, ExprValue]
   def define(name: String, value: Option[ExprValue]) =
@@ -24,21 +23,13 @@ class Environment(parent: Option[Environment]):
     }
 
 type ExprValue = String | Double | Boolean | Null
-
-// TODO maybe i went too hard here
-opaque type ExprResult = ExprValue
-object ExprResult:
-  def from(value: ExprValue): ExprResult = value
-  def show(value: ExprResult): String = value match
-    case null => "nil"
-    case d : Double =>
-      val s : String = d.toString
-      val (left, right) = s.span(_ != '.')
-      if right == ".0" then left else s
-    case s: String => s
-    case _ => value.toString
-extension (e: ExprResult)
-  def show: String = ExprResult.show(e)
+def display(value: ExprValue) = value match
+  case null => "nil"
+  case num : Double =>
+    val original = num.toString
+    val (left, right) = original.span(_ != '.')
+    if right == ".0" then left else original
+  case _ => value.toString
 
 trait Console:
   def println(s: String): Unit
@@ -80,7 +71,7 @@ private[this] object Eval:
           ((), env)
         case Print(expr) =>
           eval(expr).map {
-            e => summon[Console].println(ExprResult.from(e).show)
+            e => summon[Console].println(display(e))
           }.run(env)
         case Expr(expr) => eval(expr).discard.run(env)
         case Var(name, initializer) =>
