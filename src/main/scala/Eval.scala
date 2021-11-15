@@ -68,6 +68,10 @@ private[this] object Eval:
             if isTruthy(value) then eval(thenBranch)
             else elseBranch.map(eval(_)).getOrElse(State.unit(()))
           }.run(env)
+        case While(condition, body) =>
+          while (isTruthy(eval(condition).runA(env)))
+            eval(body).run(env)
+          ((), env)
         case Block(statements) =>
           statements.foldLeft(new Environment(Some(env))) {
             (env, statement) =>
@@ -109,6 +113,18 @@ private[this] object Eval:
               case _ => throw new RuntimeError(op, s"Operator not supported: '${op.lexeme}$value'")
             result
           }.run(env)
+        case Logical(left, op, right) =>
+          import ReservedWords.{`and`, `or`}
+          val state = op.`type` match {
+            case ReservedWord(`or`) => eval(left).flatMap { value =>
+              if isTruthy(value) then State.unit(value) else eval(right)
+            }
+            case ReservedWord(`and`) => eval(left).flatMap { value =>
+              if isTruthy(value) then eval(right) else State.unit(value)
+            }
+            case _ => throw new RuntimeError(op, s"Operator not supported: '${op.lexeme}'")
+          }
+          state.run(env)
         case Binary(left, op, right) =>
           eval(left).map2[ExprValue, ExprValue](eval(right)) {
             case (left: Double, right: Double) => op.`type` match {

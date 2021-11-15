@@ -6,6 +6,7 @@ import scala.util.{Failure, Success, Try}
 enum Statement:
   case Block(statements: List[Statement])
   case If(condition: Expression, `then`: Statement, `else`: Option[Statement])
+  case While(condition: Expression, body: Statement)
   case Expr(expression: Expression)
   case Print(expression: Expression)
   case Var(name: Token, initializer: Option[Expression])
@@ -21,6 +22,7 @@ enum Expression:
   }
   case Assign(name: Token, expr: Expression)
   case Binary(left: Expression, operator: Token, right: Expression)
+  case Logical(left: Expression, operator: Token, right: Expression)
   case Unary(operator: Token, right: Expression)
   case Grouping(expr: Expression)
   case Literal[T <: ExprValue ](value: T)
@@ -46,7 +48,7 @@ def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
  * @param t
  * @return
  */
-import TokenType.{ReservedWord, EOF}
+import TokenType.{ReservedWord, EOF, Semicolon}
 import TokenType.ReservedWord.*
 private def isSyncToken(t: TokenType) = t match
   case ReservedWord(`class`) => true
@@ -58,9 +60,11 @@ private def isSyncToken(t: TokenType) = t match
   case ReservedWord(`print`) => true
   case ReservedWord(`return`) => true
   case EOF => true
+  case Semicolon => true
   case _ => false
 
-private def synchronize(input: List[Token]) = input.drop(1).dropWhile(t => !isSyncToken(t.`type`))
+private def synchronize(input: List[Token]) =
+  input.tail.dropWhile(t => !isSyncToken(t.`type`)).dropWhile(t => t.`type` == Semicolon)
 
 private object Productions:
   import Expression.*
@@ -105,7 +109,9 @@ private object Productions:
   def statement(input: List[Token]): (List[Token], Statement) =
     // TODO unsafe
     input.head match
+      case Token(ReservedWord(`for`)) => forStatement(input.tail)
       case Token(ReservedWord(`if`)) => ifStatement(input.drop(1))
+      case Token(ReservedWord(`while`)) => whileStatement(input.drop(1))
       case Token(LeftBracket) =>
         val (remaining, statements) = block(input.drop(1))
         (remaining, Statement.Block(statements))
@@ -126,6 +132,60 @@ private object Productions:
       case Token(RightBracket) => (remaining.tail, statements)
       case Token(EOF) => (remaining, statements)
       case t => throw new ParseError("Expect '}' after block.", t, remaining)
+
+  def forStatement(input: List[Token]) =
+    input.head match
+      case Token(LeftParenthesis) =>
+        val (remaining, initializerOpt) = input.tail.head match
+          case Token(Semicolon) =>
+            (input.tail.drop(1), None)
+          case Token(ReservedWord(`var`)) => varDeclaration(input.tail.drop(1)) match
+            case (remaining, statement) =>
+              (remaining, Some(statement))
+          case _ => expressionStatement(input.tail) match
+            case (remaining, statement) =>
+              (remaining, Some(statement))
+        val (remaining2, conditionOpt) = remaining.head match
+          case Token(Semicolon) => (remaining, None)
+          case _ => expression(remaining) match
+            case (remaining, expression) =>
+              (remaining, Some(expression))
+        remaining2.head match {
+          case Token(Semicolon) =>
+            val (remaining3, incrementOpt) = remaining2.tail.head match {
+              case Token(RightParenthesis) => (remaining2.tail, None)
+              case _ => expression(remaining2.tail) match
+                case (remaining, expression) => (remaining, Some(expression))
+            }
+            remaining3.head match
+              case Token(RightParenthesis) =>
+                val (remaining4, body) = statement(remaining3.tail)
+                val fullBody = incrementOpt.fold(body) { increment =>
+                  Statement.Block {
+                    List(body, Statement.Expr(increment))
+                  }
+                }
+                val condition = conditionOpt.getOrElse(Literal(true))
+                val whileStatement = Statement.While(condition, fullBody)
+                val finalStatement = initializerOpt.fold(whileStatement) { initializer =>
+                  Statement.Block(List(initializer, whileStatement))
+                }
+                (remaining4, finalStatement)
+              case t => throw new ParseError("Expect ')' after for clauses.", t, remaining2)
+          case t => throw new ParseError("Expect ';' after loop condition.", t, remaining2)
+        }
+      case t => throw new ParseError("Expect '(' after 'for'.", t, input)
+
+  def whileStatement(input: List[Token]) =
+    input.head match
+      case Token(LeftParenthesis) =>
+        val (remaining, condition) = expression(input.tail)
+          remaining.head match
+            case Token(RightParenthesis) =>
+              val (remaining2, body) = statement(remaining.tail)
+              (remaining2, Statement.While(condition, body))
+            case t => throw new ParseError("Expect ')' after while condition.", t, input)
+      case t => throw new ParseError("Expect '(' after 'while'.", t, input)
 
   def ifStatement(input: List[Token]) =
     input.head match
@@ -158,8 +218,38 @@ private object Productions:
 
   def expression(input: List[Token]) = assignment(input)
 
+  // TODO unify with binaryMatch
+  def or(input: List[Token]) =
+    val (remaining, left) = and(input)
+    @tailrec
+    def loop(input: List[Token], expr: Expression): (List[Token], Expression) = {
+      // TODO unsafe
+      val token = input.head
+      token.`type` match
+        case ReservedWord(ReservedWords.`or`) =>
+          val (i, right) = and(input.drop(1))
+          loop(i, Logical(expr, token, right))
+        case _ => (input, expr)
+    }
+    loop(remaining, left)
+
+  def and(input: List[Token]) =
+    val (remaining, left) = equality(input)
+    @tailrec
+    def loop(input: List[Token], expr: Expression): (List[Token], Expression) = {
+      // TODO unsafe
+      val token = input.head
+      token.`type` match
+        // TODO fix scanner hack
+        case ReservedWord(ReservedWords.`and`) =>
+          val (i, right) = equality(input.drop(1))
+          loop(i, Logical(expr, token, right))
+        case _ => (input, expr)
+    }
+    loop(remaining, left)
+
   def assignment(input: List[Token]): (List[Token], Expression) =
-    val (out, expr) = equality(input)
+    val (out, expr) = or(input)
     out.head match
       case t @ Token(Equal) =>
         expr match
