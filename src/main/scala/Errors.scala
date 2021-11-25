@@ -3,7 +3,7 @@ trait Showable:
 
 sealed trait LoxError(message: String) extends Showable
 
-case class ParseError(message: String, token: Token, tail: List[Token]) extends RuntimeException(message) with LoxError(message):
+case class ParseError(message: String, token: Token) extends RuntimeException(message) with LoxError(message):
   def show = token match
     case Token(TokenType.EOF) => s"[line ${token.line}] Error at end of file: ${message}"
     case t => s"[line ${token.line}] Error at '${token.lexeme}': ${message}"

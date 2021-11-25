@@ -25,16 +25,13 @@ enum Expression:
 def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
   @tailrec
   def loop(input: List[Token], errors: List[ParseError], statements: List[Statement]): (List[ParseError], List[Statement]) = {
-    // println(input)
     input.headOption match
       case None => (errors.reverse, statements.reverse)
       case Some(Token(TokenType.EOF)) => (errors.reverse, statements.reverse)
       case _ =>
         Productions.declaration.run(input).value match
           case (remaining, Right(statement)) => loop(remaining, errors, statement :: statements)
-          case (remaining, Left(error)) =>
-            // println("mackenzie" + remaining + error)
-            loop(synchronize(remaining), error :: errors, statements)
+          case (remaining, Left(error)) => loop(synchronize(remaining), error :: errors, statements)
   }
   val (errors, statements) = loop(input, List.empty, List.empty)
   Either.cond(errors.isEmpty, statements, ParseErrors(errors))
@@ -78,8 +75,8 @@ private object Productions:
         val (remaining, initializer): (List[Token], Either[ParseError, Expression]) = expression.run(rest).value
         remaining.head match
           case Token(Semicolon) => (remaining.tail, initializer.map(init => Statement.Var(name, Some(init))))
-          case t => (remaining, Left(ParseError("Expect ';' after variable declaration.", t, remaining)))
-      case head :: rest => (input, Left(ParseError("Expect variable name.", head, input)))
+          case t => (remaining, Left(ParseError("Expect ';' after variable declaration.", t)))
+      case head :: rest => (input, Left(ParseError("Expect variable name.", head)))
       case _ => ???
   }
 
@@ -106,7 +103,7 @@ private object Productions:
     remaining.head match // TODO unsafe
       case Token(RightBracket) => (remaining.tail, statements)
       case Token(EOF) => (remaining, statements)
-      case t => (remaining, Left(ParseError("Expect '}' after block.", t, remaining)))
+      case t => (remaining, Left(ParseError("Expect '}' after block.", t)))
   }
 
   def forStatement: ParserState[Statement] = CatsState { input =>
@@ -144,13 +141,13 @@ private object Productions:
                   }
                 }.run(remaining3.tail).value
               case _ if (incrementOpt.map(_.isLeft).getOrElse(false)) => (remaining3, Left(incrementOpt.get.left.get)) // TODO cleanup
-              case t => (remaining2, Left(ParseError("Expect ')' after for clauses.", t, remaining2)))
+              case t => (remaining2, Left(ParseError("Expect ')' after for clauses.", t)))
             }
           case _ if (initializerOpt.map(_.isLeft).getOrElse(false)) => (remaining2, Left(initializerOpt.get.left.get)) // TODO cleanup
           case _ if (conditionOpt.map(_.isLeft).getOrElse(false)) => (remaining2, Left(conditionOpt.get.left.get)) // TODO cleanup
-          case t => (remaining2, Left(ParseError("Expect ';' after loop condition.", t, remaining2)))
+          case t => (remaining2, Left(ParseError("Expect ';' after loop condition.", t)))
         }
-      case t => (input, Left(ParseError("Expect '(' after 'for'.", t, input)))
+      case t => (input, Left(ParseError("Expect '(' after 'for'.", t)))
     }
   }
 
@@ -163,8 +160,8 @@ private object Productions:
             statement.map(stmt => (condition, stmt).mapN {
               While(_, _)
             }).run(remaining.tail).value
-          case t => (input, Left(ParseError("Expect ')' after while condition.", t, input)))
-      case t => (input, Left(ParseError("Expect '(' after 'while'.", t, input)))
+          case t => (input, Left(ParseError("Expect ')' after while condition.", t)))
+      case t => (input, Left(ParseError("Expect '(' after 'while'.", t)))
   }
 
   def ifStatement: ParserState[Statement] = CatsState { input =>
@@ -183,8 +180,8 @@ private object Productions:
                     }
                 }.run(remaining2.tail).value
               case _ => (remaining2, (expr, thenBranch).mapN(Statement.If(_, _, None)))
-          case t => (input, Left(ParseError("Expect ')' after if condition.", t, input)))
-      case t => (input, Left(ParseError("Expect '(' after 'if'.", t, input)))
+          case t => (input, Left(ParseError("Expect ')' after if condition.", t)))
+      case t => (input, Left(ParseError("Expect '(' after 'if'.", t)))
   }
 
   def printStatement: ParserState[Statement] = CatsState { input =>
@@ -192,7 +189,7 @@ private object Productions:
     exprE match
       case Right(expr) => remaining.head match // TODO unsafe
         case Token(Semicolon) => (remaining.tail, Right(Statement.Print(expr)))
-        case t => (remaining, Left(ParseError("Expect ';' after value.", t, remaining)))
+        case t => (remaining, Left(ParseError("Expect ';' after value.", t)))
       case Left(error) => (remaining, Left(error))
   }
 
@@ -201,7 +198,7 @@ private object Productions:
     exprE match
       case Right(expr) => remaining.head match // TODO unsafe
         case Token(Semicolon) => (remaining.tail, Right(Statement.Expr(expr)))
-        case t => (remaining, Left(ParseError("Expect ';' after expression.", t, remaining)))
+        case t => (remaining, Left(ParseError("Expect ';' after expression.", t)))
       case Left(error) => (remaining, Left(error))
   }
 
@@ -242,7 +239,7 @@ private object Productions:
         out.head match
           case t @ Token(Equal) => expr match
             case Expression.Var(name) => assignment.map(value => value.map(Assign(name, _))).run(out.tail).value
-            case _ => (out, Left(ParseError("Invalid assignment target.", t, out)))
+            case _ => (out, Left(ParseError("Invalid assignment target.", t)))
           case _ => (out, left)
       case _ => (out, left)
     }
@@ -294,6 +291,6 @@ private object Productions:
         val (i, expr) = expression.run(input.tail).value
         i.head match
           case Token(RightParenthesis) => (i.tail, expr.map(Grouping(_)))
-          case t => (input, Left(ParseError("Expected ')' after expression", token, input)))
-      case t => (input, Left(ParseError("Expect expression.", token, input)))
+          case t => (input, Left(ParseError("Expected ')' after expression", token)))
+      case t => (input, Left(ParseError("Expect expression.", token)))
   }
