@@ -1,3 +1,6 @@
 Manifest-Version: 1.0
 Main-Class: lox
+Class-Path: scala3-library_3-3.0.1.jar scala-library-2.13.6.jar simulacr
+ um-scalafix-annotations_3-0.5.4.jar cats-kernel_3-2.6.1.jar cats-core_3
+ -2.6.1.jar
 

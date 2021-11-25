@@ -2,6 +2,8 @@ import ReservedWords.*
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
+import cats.data.State as CatsState
+import cats.implicits._
 
 enum Statement:
   case Block(statements: List[Statement])
@@ -23,14 +25,16 @@ enum Expression:
 def parse(input: List[Token]): Either[ParseErrors, List[Statement]] =
   @tailrec
   def loop(input: List[Token], errors: List[ParseError], statements: List[Statement]): (List[ParseError], List[Statement]) = {
+    // println(input)
     input.headOption match
+      case None => (errors.reverse, statements.reverse)
       case Some(Token(TokenType.EOF)) => (errors.reverse, statements.reverse)
       case _ =>
-        Try(Productions.declaration.run(input)) match
-          case Success((statement, remaining)) => loop(remaining, errors, statement :: statements)
-          case Failure(e: ParseError) => // TODO do better than stuffing this into `e`
-            val remaining = synchronize(e.tail)
-            loop(remaining, e :: errors, statements)
+        Productions.declaration.run(input).value match
+          case (remaining, Right(statement)) => loop(remaining, errors, statement :: statements)
+          case (remaining, Left(error)) =>
+            // println("mackenzie" + remaining + error)
+            loop(synchronize(remaining), error :: errors, statements)
   }
   val (errors, statements) = loop(input, List.empty, List.empty)
   Either.cond(errors.isEmpty, statements, ParseErrors(errors))
@@ -59,177 +63,189 @@ private object Productions:
   import TokenType.*
   import Statement.*
 
-  def declaration: State[List[Token], Statement] = State { input =>
+  type ParserState[T] = CatsState[List[Token], Either[ParseError, T]]
+
+  def declaration: ParserState[Statement] = CatsState { input =>
     input.head match // TODO unsafe
-      case Token(ReservedWord(`var`)) => varDeclaration.run(input.tail)
-      case _ => statement.run(input)
+      case Token(ReservedWord(`var`)) => varDeclaration.run(input.tail).value
+      case _ => statement.run(input).value
   }
 
-  def varDeclaration: State[List[Token], Statement] = State { input =>
+  def varDeclaration: ParserState[Statement] = CatsState { input =>
     input match // TODO unsafe
-      case (name @ Token(Identifier(_))) :: Token(Semicolon) :: rest => (Statement.Var(name, None), rest)
+      case (name @ Token(Identifier(_))) :: Token(Semicolon) :: rest => (rest, Right(Statement.Var(name, None)))
       case (name @ Token(Identifier(_))) :: Token(Equal) :: rest =>
-        val (initializer, remaining) = expression.run(rest)
+        val (remaining, initializer): (List[Token], Either[ParseError, Expression]) = expression.run(rest).value
         remaining.head match
-          case Token(Semicolon) => (Statement.Var(name, Some(initializer)), remaining.tail)
-          case t => throw ParseError("Expect ';' after variable declaration.", t, remaining)
-      case head :: rest => throw ParseError("Expect variable name.", head, input)
+          case Token(Semicolon) => (remaining.tail, initializer.map(init => Statement.Var(name, Some(init))))
+          case t => (remaining, Left(ParseError("Expect ';' after variable declaration.", t, remaining)))
+      case head :: rest => (input, Left(ParseError("Expect variable name.", head, input)))
       case _ => ???
   }
 
-  def statement: State[List[Token], Statement] = State { input =>
+  def statement: ParserState[Statement] = CatsState { input =>
     input.head match // TODO unsafe
-      case Token(ReservedWord(`for`)) => forStatement.run(input.tail)
-      case Token(ReservedWord(`if`)) => ifStatement.run(input.tail)
-      case Token(ReservedWord(`while`)) => whileStatement.run(input.tail)
-      case Token(LeftBracket) => block.map(Block(_)).run(input.tail)
-      case Token(ReservedWord(`print`)) => printStatement.run(input.tail)
-      case _ => expressionStatement.run(input)
+      case Token(ReservedWord(`for`)) => forStatement.run(input.tail).value
+      case Token(ReservedWord(`if`)) => ifStatement.run(input.tail).value
+      case Token(ReservedWord(`while`)) => whileStatement.run(input.tail).value
+      case Token(LeftBracket) => block.map(b => b.map(Block(_))).run(input.tail).value
+      case Token(ReservedWord(`print`)) => printStatement.run(input.tail).value
+      case _ => expressionStatement.run(input).value
   }
 
-  def block: State[List[Token], List[Statement]] = State { input =>
-    def loop(input: List[Token], statements: List[Statement]): (List[Token], List[Statement]) = {
+  def block: ParserState[List[Statement]] = CatsState { input =>
+    def loop(input: List[Token], statements: Either[ParseError, List[Statement]]): (List[Token], Either[ParseError, List[Statement]]) = {
       input.headOption match
-        case Some(Token(EOF)) => (input, statements.reverse)
-        case Some(Token(RightBracket)) => (input, statements.reverse)
+        case Some(Token(EOF)) => (input, statements.map(_.reverse))
+        case Some(Token(RightBracket)) => (input, statements.map(_.reverse))
         case _ =>
-          val (statement, remaining) = declaration.run(input)
-          loop(remaining, statement :: statements)
+          val (remaining, statement) = declaration.run(input).value
+          loop(remaining, (statement, statements).mapN(_ :: _))
     }
-    val (remaining, statements) = loop(input, List.empty)
+    val (remaining, statements) = loop(input, Right(List.empty))
     remaining.head match // TODO unsafe
-      case Token(RightBracket) => (statements, remaining.tail)
-      case Token(EOF) => (statements, remaining)
-      case t => throw new ParseError("Expect '}' after block.", t, remaining)
+      case Token(RightBracket) => (remaining.tail, statements)
+      case Token(EOF) => (remaining, statements)
+      case t => (remaining, Left(ParseError("Expect '}' after block.", t, remaining)))
   }
 
-  def forStatement: State[List[Token], Statement] = State { input =>
+  def forStatement: ParserState[Statement] = CatsState { input =>
     input.head match { // TODO unsafe
       case Token(LeftParenthesis) =>
 
-        val (initializerOpt, remaining) = input.tail.head match
-          case Token(Semicolon) => (None, input.tail.tail)
-          case Token(ReservedWord(`var`)) => varDeclaration.map(Some(_)).run(input.tail.tail)
-          case _ => expressionStatement.map(Some(_)).run(input.tail)
+        val (remaining, initializerOpt): (List[Token], Option[Either[ParseError, Statement]]) = input.tail.head match
+          case Token(Semicolon) => (input.tail.tail, None)
+          case Token(ReservedWord(`var`)) => varDeclaration.map(Some(_)).run(input.tail.tail).value
+          case _ => expressionStatement.map(Some(_)).run(input.tail).value
 
-        val (conditionOpt, remaining2) = remaining.head match
-          case Token(Semicolon) => (None, remaining)
-          case _ => expression.map(Some(_)).run(remaining)
+        val (remaining2, conditionOpt): (List[Token], Option[Either[ParseError, Expression]]) = remaining.head match
+          case Token(Semicolon) => (remaining, None)
+          case _ => expression.map(Some(_)).run(remaining).value
 
         remaining2.head match {
           case Token(Semicolon) =>
-
-            val (incrementOpt, remaining3) = remaining2.tail.head match {
-              case Token(RightParenthesis) => (None, remaining2.tail)
-              case _ => expression.map(Some(_)).run(remaining2.tail)
+            val (remaining3, incrementOpt): (List[Token], Option[Either[ParseError, Expression]]) = remaining2.tail.head match {
+              case Token(RightParenthesis) => (remaining2.tail, None)
+              case _ => expression.map(Some(_)).run(remaining2.tail).value
             }
-
             remaining3.head match {
               case Token(RightParenthesis) =>
-                statement.map { body =>
-                  val whileStatement = While(
-                    conditionOpt.getOrElse(Literal(true)),
-                    incrementOpt.fold(body) { increment =>
-                      Block(List(body, Expr(increment)))
-                    }
-                  )
-                  initializerOpt.fold(whileStatement) { initializer =>
-                    Block(List(initializer, whileStatement))
+                statement.map { bodyE =>
+                  val conditionE = conditionOpt.getOrElse(Right(Literal(true)))
+                  val bodyIncE = incrementOpt.fold(bodyE) { incrementE =>
+                    (bodyE, incrementE).mapN((body, increment) => Block(List(body, Expr(increment))))
                   }
-                }.run(remaining3.tail)
-              case t => throw new ParseError("Expect ')' after for clauses.", t, remaining2)
+                  val whileE = (conditionE, bodyIncE).mapN { (cond, body) =>
+                    While(cond, Block(List(body)))
+                  }
+                  initializerOpt.fold(whileE) { initializerE =>
+                    (initializerE, whileE).mapN(
+                      (init: Statement, w: Statement) => Block(List(init, w)))
+                  }
+                }.run(remaining3.tail).value
+              case _ if (incrementOpt.map(_.isLeft).getOrElse(false)) => (remaining3, Left(incrementOpt.get.left.get)) // TODO cleanup
+              case t => (remaining2, Left(ParseError("Expect ')' after for clauses.", t, remaining2)))
             }
-          case t => throw new ParseError("Expect ';' after loop condition.", t, remaining2)
+          case _ if (initializerOpt.map(_.isLeft).getOrElse(false)) => (remaining2, Left(initializerOpt.get.left.get)) // TODO cleanup
+          case _ if (conditionOpt.map(_.isLeft).getOrElse(false)) => (remaining2, Left(conditionOpt.get.left.get)) // TODO cleanup
+          case t => (remaining2, Left(ParseError("Expect ';' after loop condition.", t, remaining2)))
         }
-      case t => throw new ParseError("Expect '(' after 'for'.", t, input)
+      case t => (input, Left(ParseError("Expect '(' after 'for'.", t, input)))
     }
   }
 
-  def whileStatement: State[List[Token], Statement] = State { input =>
+  def whileStatement: ParserState[Statement] = CatsState { input =>
     input.head match // TODO unsafe
       case Token(LeftParenthesis) =>
-        val (condition, remaining) = expression.run(input.tail)
-        remaining.head match
-          case Token(RightParenthesis) => statement.map(While(condition, _)).run(remaining.tail)
-          case t => throw new ParseError("Expect ')' after while condition.", t, input)
-      case t => throw new ParseError("Expect '(' after 'while'.", t, input)
-  }
-
-  def ifStatement: State[List[Token], Statement] = State { input =>
-    input.head match // TODO unsafe
-      case Token(LeftParenthesis) =>
-        val (expr, remaining) = expression.run(input.tail)
+        val (remaining, condition) = expression.run(input.tail).value
         remaining.head match
           case Token(RightParenthesis) =>
-            val (thenBranch, remaining2) = statement.run(remaining.tail)
+            statement.map(stmt => (condition, stmt).mapN {
+              While(_, _)
+            }).run(remaining.tail).value
+          case t => (input, Left(ParseError("Expect ')' after while condition.", t, input)))
+      case t => (input, Left(ParseError("Expect '(' after 'while'.", t, input)))
+  }
+
+  def ifStatement: ParserState[Statement] = CatsState { input =>
+    input.head match // TODO unsafe
+      case Token(LeftParenthesis) =>
+        val (remaining, expr) = expression.run(input.tail).value
+        remaining.head match
+          case Token(RightParenthesis) =>
+            val (remaining2, thenBranch) = statement.run(remaining.tail).value
             remaining2.head match
               case Token(ReservedWord(`else`)) =>
-                statement.map(elseBranch => If(expr, thenBranch, Some(elseBranch))).run(remaining2.tail)
-              case _ => (Statement.If(expr, thenBranch, None), remaining2)
-          case t => throw new ParseError("Expect ')' after if condition.", t, input)
-      case t => throw new ParseError("Expect '(' after 'if'.", t, input)
+                statement.map {
+                  elseBranch =>
+                    (expr, thenBranch, elseBranch).mapN { (expr, thenBranch, elseBranch) =>
+                      If(expr, thenBranch, Some(elseBranch))
+                    }
+                }.run(remaining2.tail).value
+              case _ => (remaining2, (expr, thenBranch).mapN(Statement.If(_, _, None)))
+          case t => (input, Left(ParseError("Expect ')' after if condition.", t, input)))
+      case t => (input, Left(ParseError("Expect '(' after 'if'.", t, input)))
   }
 
-  def printStatement: State[List[Token], Statement] = State { input =>
-    val (expr, remaining) = expression.run(input)
-    // TODO unsafe
-    remaining.head match
-      case Token(Semicolon) => (Statement.Print(expr), remaining.tail)
-      case t => throw ParseError("Expect ';' after value.", t, remaining)
+  def printStatement: ParserState[Statement] = CatsState { input =>
+    val (remaining, exprE): (List[Token], Either[ParseError, Expression]) = expression.run(input).value
+    exprE match
+      case Right(expr) => remaining.head match // TODO unsafe
+        case Token(Semicolon) => (remaining.tail, Right(Statement.Print(expr)))
+        case t => (remaining, Left(ParseError("Expect ';' after value.", t, remaining)))
+      case Left(error) => (remaining, Left(error))
   }
 
-  def expressionStatement: State[List[Token], Statement] = State { input =>
-    val (expr, remaining) = expression.run(input)
-    remaining.head match // TODO unsafe
-      case Token(Semicolon) => (Statement.Expr(expr), remaining.tail)
-      case t => throw ParseError("Expect ';' after expression.", t, remaining)
+  def expressionStatement: ParserState[Statement] = CatsState { input =>
+    val (remaining, exprE): (List[Token], Either[ParseError, Expression]) = expression.run(input).value
+    exprE match
+      case Right(expr) => remaining.head match // TODO unsafe
+        case Token(Semicolon) => (remaining.tail, Right(Statement.Expr(expr)))
+        case t => (remaining, Left(ParseError("Expect ';' after expression.", t, remaining)))
+      case Left(error) => (remaining, Left(error))
   }
 
-  def expression: State[List[Token], Expression] = assignment
+  def expression: ParserState[Expression] = assignment
 
-  // TODO unify with binaryMatch
-  def or: State[List[Token], Expression] = State { input =>
-    val (left, remaining) = and.run(input)
+  def or: ParserState[Expression] = CatsState { input =>
+    val (remaining, left) = and.run(input).value
     @tailrec
-    def loop(expr: Expression, input: List[Token]): (Expression, List[Token]) = {
-      // TODO unsafe
-      val token = input.head
+    def loop(input: List[Token], left: Either[ParseError, Expression]): (List[Token], Either[ParseError, Expression]) = {
+      val token = input.head // TODO unsafe
       token.`type` match
         case ReservedWord(ReservedWords.`or`) =>
-          val (right, i) = and.run(input.tail)
-          loop(Logical(expr, token, right), i)
-        case _ => (expr, input)
+          val (i, right) = and.run(input.tail).value
+          loop(i, (left, right).mapN(Logical(_, token, _)))
+        case _ => (input, left)
     }
-    loop(left, remaining)
+    loop(remaining, left)
   }
 
-  def and: State[List[Token], Expression] = State { input =>
-    val (left, remaining) = equality.run(input)
+  def and: ParserState[Expression] = CatsState { input =>
+    val (remaining, left) = equality.run(input).value
     @tailrec
-    def loop(expr: Expression, input: List[Token]): (Expression, List[Token]) = {
-      // TODO unsafe
-      val token = input.head
+    def loop(input: List[Token], left: Either[ParseError, Expression]): (List[Token], Either[ParseError, Expression]) = {
+      val token = input.head // TODO unsafe
       token.`type` match
-        // TODO fix scanner hack
         case ReservedWord(ReservedWords.`and`) =>
-          val (right, i) = equality.run(input.tail)
-          loop(Logical(expr, token, right), i)
-        case _ => (expr, input)
+          val (i, right) = equality.run(input.tail).value
+          loop(i, (left, right).mapN(Logical(_, token, _)))
+        case _ => (input, left)
     }
-    loop(left, remaining)
+    loop(remaining, left)
   }
 
-  def assignment: State[List[Token], Expression] = State { input =>
-    val (expr, out) = or.run(input)
-    out.head match
-      case t @ Token(Equal) =>
-        expr match
-          case Expression.Var(name) => assignment.map(value => Assign(name, value)).run(out.tail)
-          case _ =>
-            // TODO not supposed to throw here, just report
-            // https://github.com/munificent/craftinginterpreters/blob/master/java/com/craftinginterpreters/lox/Lox.java#L109-L117
-            throw ParseError("Invalid assignment target.", t, out)
-      case _ => (expr, out)
+  def assignment: ParserState[Expression] = CatsState { input =>
+    val (out, left): (List[Token], Either[ParseError, Expression]) = or.run(input).value
+    left match {
+      case Right(expr) =>
+        out.head match
+          case t @ Token(Equal) => expr match
+            case Expression.Var(name) => assignment.map(value => value.map(Assign(name, _))).run(out.tail).value
+            case _ => (out, Left(ParseError("Invalid assignment target.", t, out)))
+          case _ => (out, left)
+      case _ => (out, left)
+    }
   }
 
   type Equality = EqualEqual.type | BangEqual.type
@@ -243,41 +259,41 @@ private object Productions:
   def term = binaryMatch[Term](factor)
   def factor = binaryMatch[Factor](unary)
 
-  inline def binaryMatch[A <: TokenType](next: State[List[Token], Expression]): State[List[Token], Expression] = State { input =>
-    val (left, in) = next.run(input)
+  inline def binaryMatch[A <: TokenType](next: ParserState[Expression]): ParserState[Expression] = CatsState { input =>
+    val (in, left): (List[Token], Either[ParseError, Expression]) = next.run(input).value
     @tailrec
-    def loop(expr: Expression, input: List[Token]): (Expression, List[Token]) = {
+    def loop(input: List[Token], left: Either[ParseError, Expression]): (List[Token], Either[ParseError, Expression]) = {
       val token = input.head // TODO unsafe
       token.`type` match
         case t: A =>
-          val (right, i) = next.run(input.tail)
-          loop(Binary(expr, token, right), i)
-        case _ => (expr, input)
+          val (i, right) = next.run(input.tail).value
+          loop(i, (left, right).mapN(Binary(_, token, _)))
+        case _ => (input, left)
     }
-    loop(left, in)
+    loop(in, left)
   }
 
-  def unary: State[List[Token], Expression] = State { input =>
+  def unary: ParserState[Expression] = CatsState { input =>
     val token = input.head
     token.`type` match
       case t : Unary =>
-        unary.map(right => Unary(token, right)).run(input.tail)
-      case _ => primary.run(input)
+        unary.map(right => right.map(Unary(token, _))).run(input.tail).value
+      case _ => primary.run(input).value
   }
 
-  def primary: State[List[Token], Expression] = State { input =>
-    val token = input.head // TODO unsafe
+  def primary: ParserState[Expression] = CatsState { input =>
+    val token = input.head
     token.`type` match
-      case TokenType.String(lexeme) => (Literal(lexeme), input.tail)
-      case TokenType.Number(lexeme) => (Literal(lexeme.toDouble), input.tail)
-      case Identifier(_) => (Expression.Var(token), input.tail)
-      case ReservedWord(`true`) => (Literal(true), input.tail)
-      case ReservedWord(`false`) => (Literal(false), input.tail)
-      case ReservedWord(`nil`) => (Literal(null), input.tail)
+      case TokenType.String(lexeme) => (input.tail, Right(Literal(lexeme)))
+      case TokenType.Number(lexeme) => (input.tail, Right(Literal(lexeme.toDouble)))
+      case Identifier(_) => (input.tail, Right(Expression.Var(token)))
+      case ReservedWord(`true`) => (input.tail, Right(Literal(true)))
+      case ReservedWord(`false`) => (input.tail, Right(Literal(false)))
+      case ReservedWord(`nil`) => (input.tail, Right(Literal(null)))
       case LeftParenthesis =>
-        val (expr, i) = expression.run(input.tail)
+        val (i, expr) = expression.run(input.tail).value
         i.head match
-          case Token(RightParenthesis) => (Grouping(expr), i.tail)
-          case t => throw ParseError("Expected ')' after expression", token, input)
-      case t => throw ParseError("Expect expression.", token, input)
+          case Token(RightParenthesis) => (i.tail, expr.map(Grouping(_)))
+          case t => (input, Left(ParseError("Expected ')' after expression", token, input)))
+      case t => (input, Left(ParseError("Expect expression.", token, input)))
   }
