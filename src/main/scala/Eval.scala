@@ -1,6 +1,8 @@
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Try
+import cats.data.State as CatsState
+import cats.syntax.apply._
 
 class Environment(parent: Option[Environment]):
   private val values = mutable.Map.empty[String, ExprValue]
@@ -34,7 +36,7 @@ def display(value: ExprValue) = value match
 def eval(statements: Seq[Statement], env: Environment): Either[RuntimeError, Environment] =
   Try {
     statements.foldLeft(env) {
-      (env, statement) => Eval.eval(statement).runS(env)
+      (env, statement) => Eval.eval(statement).runS(env).value
     }
   }.toEither.left.map {
     case e: RuntimeError => e
@@ -47,50 +49,50 @@ private[this] object Eval:
     case b: Boolean => b
     case _ => true
 
-  def eval[A](statement: Statement): State[Environment, Unit] =
+  def eval[A](statement: Statement): CatsState[Environment, Unit] =
     import Statement.*
-    State {
+    CatsState {
       env => statement match {
         case If(expression, thenBranch, elseBranch) =>
           eval(expression).flatMap { value =>
             if isTruthy(value) then eval(thenBranch)
-            else elseBranch.map(eval(_)).getOrElse(State.unit(()))
-          }.run(env)
+            else elseBranch.map(eval(_)).getOrElse(CatsState.pure(()))
+          }.run(env).value
         case While(condition, body) =>
-          while (isTruthy(eval(condition).runA(env)))
-            eval(body).run(env)
-          ((), env)
+          while (isTruthy(eval(condition).runA(env).value))
+            eval(body).run(env).value
+          (env, ())
         case Block(statements) =>
           statements.foldLeft(new Environment(Some(env))) {
             (env, statement) =>
-              eval(statement).runS(env)
+              eval(statement).runS(env).value
           }
-          ((), env)
+          (env, ())
         case Print(expr) =>
           eval(expr).map {
             e => println(display(e))
-          }.run(env)
-        case Expr(expr) => eval(expr).discard.run(env)
+          }.run(env).value
+        case Expr(expr) => eval(expr).map(_ => ()).run(env).value
         case Var(name, initializer) =>
           env.define(name.lexeme, initializer.map { expr =>
-            eval(expr).runA(env)
+            eval(expr).runA(env).value
           })
-          ((), env)
+          (env, ())
     }
   }
 
   import Expression.*
   import TokenType.{String as _, Number as _, *}
-  def eval(expr: Expression): State[Environment, ExprValue] =
-    State {
+  def eval(expr: Expression): CatsState[Environment, ExprValue] =
+    CatsState {
       env => expr match
         case Assign(name, expr) =>
           eval(expr).map {
             value => env.assign(name, value); value
-          }.run(env)
-        case Literal(value) => (value, env)
-        case Grouping(expr) => eval(expr).run(env)
-        case Var(identifier) => (env.get(identifier), env)
+          }.run(env).value
+        case Literal(value) => (env, value)
+        case Grouping(expr) => eval(expr).run(env).value
+        case Var(identifier) => (env, env.get(identifier))
         case Unary(op, right) =>
           eval(right).map { value =>
             val result: ExprValue = op.`type` match
@@ -100,21 +102,21 @@ private[this] object Eval:
               case Bang => !isTruthy(value)
               case _ => throw new RuntimeError(op, s"Operator not supported: '${op.lexeme}$value'")
             result
-          }.run(env)
+          }.run(env).value
         case Logical(left, op, right) =>
           import ReservedWords.{`and`, `or`}
           val state = op.`type` match {
             case ReservedWord(`or`) => eval(left).flatMap { value =>
-              if isTruthy(value) then State.unit(value) else eval(right)
+              if isTruthy(value) then CatsState.pure(value) else eval(right)
             }
             case ReservedWord(`and`) => eval(left).flatMap { value =>
-              if isTruthy(value) then eval(right) else State.unit(value)
+              if isTruthy(value) then eval(right) else CatsState.pure(value)
             }
             case _ => throw new RuntimeError(op, s"Operator not supported: '${op.lexeme}'")
           }
-          state.run(env)
+          state.run(env).value
         case Binary(left, op, right) =>
-          eval(left).map2[ExprValue, ExprValue](eval(right)) {
+          (eval(left), eval(right)).mapN[ExprValue] {
             case (left: Double, right: Double) => op.`type` match {
               case Minus => left - right
               case Slash => left / right
@@ -140,7 +142,7 @@ private[this] object Eval:
               case Plus => throw new RuntimeError(op, s"Operands must be two numbers or two strings.")
               case _ => throw new RuntimeError(op, s"Operands must be numbers.")
             }
-          }.run(env)
+          }.run(env).value
     }
 
 
