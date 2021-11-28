@@ -2,8 +2,8 @@ import ReservedWords.*
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
-import cats.data.State as CatsState
-import cats.implicits._
+import cats.data.State
+import cats.syntax.apply._
 
 // TODO get rid of all List.head usage
 
@@ -62,9 +62,9 @@ private object Productions:
   import TokenType.*
   import Statement.*
 
-  type ParserState[T] = CatsState[List[Token], Either[ParseError, T]]
+  type ParserState[T] = State[List[Token], Either[ParseError, T]]
 
-  def declaration: ParserState[Statement] = CatsState { input =>
+  def declaration: ParserState[Statement] = State { input =>
     input.headOption
       .map {
         case Token(ReservedWord(`var`)) => varDeclaration.run(input.tail).value
@@ -75,7 +75,7 @@ private object Productions:
       }
   }
 
-  def varDeclaration: ParserState[Statement] = CatsState { input =>
+  def varDeclaration: ParserState[Statement] = State { input =>
     input match // TODO unsafe
       case (name @ Token(Identifier(_))) :: Token(Semicolon) :: rest => (rest, Right(Statement.Var(name, None)))
       case (name @ Token(Identifier(_))) :: Token(Equal) :: rest =>
@@ -87,7 +87,7 @@ private object Productions:
       case _ => ???
   }
 
-  def statement: ParserState[Statement] = CatsState { input =>
+  def statement: ParserState[Statement] = State { input =>
     input.headOption
       .map {
         case Token(ReservedWord(`for`)) => forStatement.run(input.tail).value
@@ -102,7 +102,7 @@ private object Productions:
       }
   }
 
-  def block: ParserState[List[Statement]] = CatsState { input =>
+  def block: ParserState[List[Statement]] = State { input =>
     def loop(input: List[Token], statements: Either[ParseError, List[Statement]]): (List[Token], Either[ParseError, List[Statement]]) = {
       input.headOption match
         case Some(Token(EOF)) => (input, statements.map(_.reverse))
@@ -123,7 +123,7 @@ private object Productions:
       }
   }
 
-  def forStatement: ParserState[Statement] = CatsState { input =>
+  def forStatement: ParserState[Statement] = State { input =>
     input.headOption
       .map {
         case Token(LeftParenthesis) =>
@@ -172,7 +172,7 @@ private object Productions:
       }
   }
 
-  def whileStatement: ParserState[Statement] = CatsState { input =>
+  def whileStatement: ParserState[Statement] = State { input =>
     input.headOption
       .map {
         case Token(LeftParenthesis) =>
@@ -190,7 +190,7 @@ private object Productions:
       }
   }
 
-  def ifStatement: ParserState[Statement] = CatsState { input =>
+  def ifStatement: ParserState[Statement] = State { input =>
     input.headOption
       .map {
         case Token(LeftParenthesis) =>
@@ -215,7 +215,7 @@ private object Productions:
       }
   }
 
-  def printStatement: ParserState[Statement] = CatsState { input =>
+  def printStatement: ParserState[Statement] = State { input =>
     val (remaining, exprE): (List[Token], Either[ParseError, Expression]) = expression.run(input).value
     exprE match
       case Right(expr) =>
@@ -230,7 +230,7 @@ private object Productions:
       case Left(error) => (remaining, Left(error))
   }
 
-  def expressionStatement: ParserState[Statement] = CatsState { input =>
+  def expressionStatement: ParserState[Statement] = State { input =>
     val (remaining, exprE): (List[Token], Either[ParseError, Expression]) = expression.run(input).value
     exprE match
       case Right(expr) =>
@@ -246,7 +246,7 @@ private object Productions:
 
   def expression: ParserState[Expression] = assignment
 
-  def or: ParserState[Expression] = CatsState { input =>
+  def or: ParserState[Expression] = State { input =>
     val (remaining, left) = and.run(input).value
     @tailrec
     def loop(input: List[Token], left: Either[ParseError, Expression]): (List[Token], Either[ParseError, Expression]) = {
@@ -263,7 +263,7 @@ private object Productions:
     loop(remaining, left)
   }
 
-  def and: ParserState[Expression] = CatsState { input =>
+  def and: ParserState[Expression] = State { input =>
     val (remaining, left) = equality.run(input).value
     @tailrec
     def loop(input: List[Token], left: Either[ParseError, Expression]): (List[Token], Either[ParseError, Expression]) = {
@@ -280,7 +280,7 @@ private object Productions:
     loop(remaining, left)
   }
 
-  def assignment: ParserState[Expression] = CatsState { input =>
+  def assignment: ParserState[Expression] = State { input =>
     val (out, left): (List[Token], Either[ParseError, Expression]) = or.run(input).value
     left match {
       case Right(expr) =>
@@ -309,7 +309,7 @@ private object Productions:
   def term = binaryMatch[Term](factor)
   def factor = binaryMatch[Factor](unary)
 
-  inline def binaryMatch[A <: TokenType](next: ParserState[Expression]): ParserState[Expression] = CatsState { input =>
+  inline def binaryMatch[A <: TokenType](next: ParserState[Expression]): ParserState[Expression] = State { input =>
     val (in, left): (List[Token], Either[ParseError, Expression]) = next.run(input).value
     @tailrec
     def loop(input: List[Token], left: Either[ParseError, Expression]): (List[Token], Either[ParseError, Expression]) = {
@@ -326,7 +326,7 @@ private object Productions:
     loop(in, left)
   }
 
-  def unary: ParserState[Expression] = CatsState { input =>
+  def unary: ParserState[Expression] = State { input =>
     input.headOption
       .map { token =>
         token.`type` match
@@ -339,7 +339,7 @@ private object Productions:
       }
   }
 
-  def primary: ParserState[Expression] = CatsState { input =>
+  def primary: ParserState[Expression] = State { input =>
     input.headOption
       .map { token =>
         token.`type` match

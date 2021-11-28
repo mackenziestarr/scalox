@@ -1,7 +1,7 @@
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Try
-import cats.data.State as CatsState
+import cats.data.State
 import cats.syntax.apply._
 
 class Environment(parent: Option[Environment]):
@@ -49,14 +49,14 @@ private[this] object Eval:
     case b: Boolean => b
     case _ => true
 
-  def eval[A](statement: Statement): CatsState[Environment, Unit] =
+  def eval[A](statement: Statement): State[Environment, Unit] =
     import Statement.*
-    CatsState {
+    State {
       env => statement match {
         case If(expression, thenBranch, elseBranch) =>
           eval(expression).flatMap { value =>
             if isTruthy(value) then eval(thenBranch)
-            else elseBranch.map(eval(_)).getOrElse(CatsState.pure(()))
+            else elseBranch.map(eval(_)).getOrElse(State.pure(()))
           }.run(env).value
         case While(condition, body) =>
           while (isTruthy(eval(condition).runA(env).value))
@@ -83,8 +83,8 @@ private[this] object Eval:
 
   import Expression.*
   import TokenType.{String as _, Number as _, *}
-  def eval(expr: Expression): CatsState[Environment, ExprValue] =
-    CatsState {
+  def eval(expr: Expression): State[Environment, ExprValue] =
+    State {
       env => expr match
         case Assign(name, expr) =>
           eval(expr).map {
@@ -107,10 +107,10 @@ private[this] object Eval:
           import ReservedWords.{`and`, `or`}
           val state = op.`type` match {
             case ReservedWord(`or`) => eval(left).flatMap { value =>
-              if isTruthy(value) then CatsState.pure(value) else eval(right)
+              if isTruthy(value) then State.pure(value) else eval(right)
             }
             case ReservedWord(`and`) => eval(left).flatMap { value =>
-              if isTruthy(value) then eval(right) else CatsState.pure(value)
+              if isTruthy(value) then eval(right) else State.pure(value)
             }
             case _ => throw new RuntimeError(op, s"Operator not supported: '${op.lexeme}'")
           }
